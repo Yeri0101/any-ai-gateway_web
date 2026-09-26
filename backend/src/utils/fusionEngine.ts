@@ -248,13 +248,21 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
         });
 
         const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error(`Draft timeout for ${model} after 15s`)), 15000)
+            setTimeout(() => reject(new Error(`Draft timeout for ${model} after 25s`)), 25000)
         );
 
         const result: any = await Promise.race([execPromise, timeoutPromise]);
 
         const latencyMs = Date.now() - draftStart;
-        const content = result?.choices?.[0]?.message?.content || '';
+        const msg = result?.choices?.[0]?.message;
+        let content = msg?.content || '';
+        if (!content && (msg?.reasoning || msg?.reasoning_content)) {
+            content = msg.reasoning || msg.reasoning_content;
+        }
+        if (!content && result?.choices?.[0]?.text) {
+            content = result.choices[0].text;
+        }
+        content = (content || '').trim();
         if (!content) {
             throw new Error(`Model ${model} returned empty response`);
         }
@@ -293,8 +301,38 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
         }
     });
 
-    // Fallback: If 0 drafts succeeded, fail gracefully
+    // Fallback: If 0 drafts succeeded, engage Emergency Solo Fallback to protect agent session
     if (successfulDrafts.length === 0) {
+        console.warn(`[Fusion] ⚠️ All drafts failed in panel (${panel.join(', ')}). Engaging Emergency Solo Fallback.`);
+        const emergencyCandidates = ['qwen/qwen3.8-27b', 'gemini-2.5-flash', 'llama-3.3-70b-versatile', 'google/gemma-4-31b-it:free'];
+        for (const candidate of emergencyCandidates) {
+            try {
+                console.log(`[Fusion] Attempting emergency solo fallback model: ${candidate}`);
+                const soloRes = await executeChatCompletion({
+                    body: { ...body, model: candidate, stream: !!body.stream },
+                    gatewayKey,
+                    isInternalCall: true,
+                });
+                const soloMsg = soloRes?.choices?.[0]?.message;
+                const soloContent = soloMsg?.content || soloMsg?.reasoning || soloRes?.choices?.[0]?.text;
+                if (soloContent) {
+                    console.log(`[Fusion] Emergency fallback succeeded with ${candidate}`);
+                    return {
+                        finalResponse: soloRes,
+                        fusionMetadata: {
+                            panel_models: panel,
+                            successful_drafts: 0,
+                            judge_model: candidate,
+                            total_latency_ms: Date.now() - startTime,
+                            draft_details: draftDetails,
+                        },
+                        isStream: !!body.stream,
+                    };
+                }
+            } catch (err: any) {
+                console.warn(`[Fusion] Emergency candidate ${candidate} failed: ${err.message}`);
+            }
+        }
         throw new Error(`Fusion engine: All candidate models in the panel failed (${panel.join(', ')})`);
     }
 
@@ -321,8 +359,13 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
             gatewayKey,
             isInternalCall: false, // allow streaming if requested
         });
-        if (!body.stream && (!judgeResult || !judgeResult.choices || !judgeResult.choices.length || !judgeResult.choices[0]?.message?.content)) {
+        const judgeMsg = judgeResult?.choices?.[0]?.message;
+        const judgeContent = judgeMsg?.content || judgeMsg?.reasoning || judgeMsg?.reasoning_content || judgeResult?.choices?.[0]?.text;
+        if (!body.stream && (!judgeResult || !judgeResult.choices || !judgeResult.choices.length || !judgeContent)) {
             throw new Error(`Judge model ${judge} returned invalid or empty response`);
+        }
+        if (judgeMsg && !judgeMsg.content && judgeContent) {
+            judgeMsg.content = judgeContent;
         }
     } catch (judgeErr: any) {
         console.warn(`[Fusion] Judge dispatch failed (${judgeErr.message}). Falling back directly to winning draft (${bestDraft.model}).`);

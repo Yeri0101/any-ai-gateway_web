@@ -184,8 +184,18 @@ export function resolveModelOrHeal(
         };
     }
 
-    // 2. Virtual special models (fusion, systemone) don't need remapping
-    if (normalizedReq === 'fusion' || normalizedReq === 'openclaw/fusion' || normalizedReq.startsWith('fusion:')) {
+    // 2. Virtual special models (fusion, systemone) and verified free endpoints don't need remapping
+    if (
+        normalizedReq === 'fusion' ||
+        normalizedReq === 'openclaw/fusion' ||
+        normalizedReq.startsWith('fusion:') ||
+        normalizedReq.startsWith('fusion-') ||
+        normalizedReq.startsWith('fusion/') ||
+        normalizedReq.endsWith(':free') ||
+        normalizedReq.startsWith('openrouter/') ||
+        normalizedReq.startsWith('thinkingmachines/') ||
+        normalizedReq.startsWith('poolside/')
+    ) {
         return {
             healed: false,
             originalModel: normalizedReq,
@@ -245,7 +255,11 @@ export function resolveModelOrHeal(
 
     // 5. Ultimate Fallback: If still unmatched, but project has at least 1 active model, use the first available
     if (!resolvedModel && configuredModels.length > 0) {
-        resolvedModel = configuredModels[0];
+        if (normalizedReq.includes(':free')) {
+            resolvedModel = configuredModels.find(m => m.includes(':free') || m.includes('free') || m.includes('flash') || m.includes('mini')) || configuredModels[0];
+        } else {
+            resolvedModel = configuredModels[0];
+        }
         healingReason = `Model '${normalizedReq}' is retired or unmapped. Auto-routed to active project primary model '${resolvedModel}' to preserve agent availability.`;
     }
 
