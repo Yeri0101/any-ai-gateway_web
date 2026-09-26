@@ -1145,6 +1145,30 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             }
         }
 
+        // Universal Message Sanitization:
+        // Strip client-specific telemetry (e.g. OpenClaw metadata like __openclaw, idempotencyKey, timestamp, responseId, responseModel, usage, stopReason, api, provider, model)
+        // that cause strict schema validation providers (like Mistral, Cohere, Anthropic) to throw HTTP 422 extra_forbidden.
+        if (Array.isArray(forwardBody.messages)) {
+            const standardKeys = new Set(['role', 'content', 'name', 'tool_calls', 'tool_call_id']);
+            forwardBody.messages = forwardBody.messages.map((msg: any) => {
+                if (!msg || typeof msg !== 'object') return msg;
+                const clean: any = {};
+                for (const [k, v] of Object.entries(msg)) {
+                    if (standardKeys.has(k)) {
+                        clean[k] = v;
+                    }
+                }
+                if (upstream.provider === 'mistral' || upstream.provider === 'cerebras') {
+                    if (Array.isArray(clean.content)) {
+                        clean.content = clean.content
+                            .map((b: any) => typeof b === 'string' ? b : b?.text ?? '')
+                            .join('');
+                    }
+                }
+                return clean;
+            });
+        }
+
         // Token Cap
         const premiumKey = process.env.SOAT_PREMIUM_BYPASS_KEY || '';
         const isPremiumProject = premiumKey.length > 0 && typeof gatewayKey?.id === 'string' && gatewayKey.id === premiumKey;
@@ -1295,7 +1319,9 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     errMsg?.toLowerCase().includes('insufficient_quota') ||
                     errMsg?.toLowerCase().includes('exceed your available credits');
 
-                if (isRateLimit || response.status >= 500 || isRequestTooLarge || isModelNotFound || isPaymentOrQuota) {
+                const isSchemaOrClientError = response.status === 422 || response.status === 400;
+
+                if (isRateLimit || response.status >= 500 || isRequestTooLarge || isModelNotFound || isPaymentOrQuota || isSchemaOrClientError) {
                     const { tripped } = recordCircuitFailure(upstream.id, upstream.provider, errMsg);
                     if (tripped) {
                         dispatchAlert({

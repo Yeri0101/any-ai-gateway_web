@@ -228,6 +228,37 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
     const engineConfig = getEngineConfig(false);
     const slotProjects = engineConfig?.fusionSlotProjects || [];
 
+    // 0. Agent Tool Passthrough:
+    // If the client provides tools (e.g. OpenClaw agent executing tasks like inspecting files, running bash, etc.),
+    // dialectical text synthesis cannot produce valid tool_calls and breaks agent execution.
+    // In this mode, route directly to the premier tool-capable model (the judge or designated tool model).
+    const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
+    if (hasTools) {
+        const agentModel = judge || panel.find(m => m.includes('mimo') || m.includes('gemini') || m.includes('deepseek') || m.includes('qwen')) || panel[0];
+        console.log(`[${ts}] [Fusion] Agent tool execution detected (tools=${body.tools.length}). Routing directly to tool-capable model: ${agentModel}`);
+        const agentBody = {
+            ...body,
+            model: agentModel,
+            _targetSlotSource: slotProjects[3] || slotProjects[0] || '',
+        };
+        const agentRes = await executeChatCompletion({
+            body: agentBody,
+            gatewayKey,
+            isInternalCall: false,
+        });
+        return {
+            finalResponse: agentRes,
+            fusionMetadata: {
+                panel_models: [agentModel],
+                successful_drafts: 1,
+                judge_model: agentModel,
+                total_latency_ms: Date.now() - startTime,
+                draft_details: [{ model: agentModel, latency_ms: Date.now() - startTime, success: true }],
+            },
+            isStream: !!body.stream,
+        };
+    }
+
     // 1. Dispatch 3 drafts in parallel with per-draft 15s timeout
     const draftPromises = panel.map(async (model, idx): Promise<FusionDraft> => {
         const draftStart = Date.now();
@@ -263,6 +294,17 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
             content = result.choices[0].text;
         }
         content = (content || '').trim();
+
+        // Strip explicit <think>...</think> tags if present so draft is the actual answer
+        if (content.includes('</think>')) {
+            const stripped = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+            if (stripped) content = stripped;
+        }
+
+        if (!content && msg?.tool_calls) {
+            content = `[Tool call: ${JSON.stringify(msg.tool_calls)}]`;
+        }
+
         if (!content) {
             throw new Error(`Model ${model} returned empty response`);
         }
