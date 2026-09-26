@@ -6,6 +6,7 @@ import { pauseProvider } from '../utils/limitTracker';
 import { getProjectHistory, repairProjectChannels, autoDiscoverAndSyncProjectModels, autoDiscoverAndSyncAllProjects } from '../utils/modelHealing';
 import { dashboardEvents } from '../utils/dashboardEvents';
 import { getCacheStats } from '../utils/semanticCache';
+import { estimateLogCost } from '../utils/pricingHelper';
 
 const projects = new Hono();
 
@@ -21,7 +22,7 @@ projects.get('/dashboard-overview', async (c) => {
                 .order('created_at', { ascending: false }),
             supabase
                 .from('request_logs')
-                .select('project_id, gateway_key_id, upstream_key_id, provider, model, latency_ms, total_tokens, total_cost_usd, created_at')
+                .select('project_id, gateway_key_id, upstream_key_id, provider, model, latency_ms, total_tokens, prompt_tokens, completion_tokens, total_cost_usd, created_at')
                 .order('created_at', { ascending: false })
                 .limit(2000),
             supabase
@@ -50,7 +51,7 @@ projects.get('/dashboard-overview', async (c) => {
 
         for (const log of logs) {
             totalTokens += (log.total_tokens || 0);
-            const cost = Number(log.total_cost_usd || 0);
+            const cost = estimateLogCost(log);
             const isCache = log.provider === 'cache';
             const bType = isCache ? 'free' : (log.upstream_key_id ? billingTypeMap.get(log.upstream_key_id) || 'paid' : 'paid');
             if (bType === 'free') {
@@ -90,6 +91,7 @@ projects.get('/dashboard-overview', async (c) => {
                     provider: log.provider || null,
                     latency_ms: log.latency_ms ?? null,
                     total_tokens: log.total_tokens ?? 0,
+                    cost_usd: estimateLogCost(log),
                     created_at: log.created_at,
                 };
             })

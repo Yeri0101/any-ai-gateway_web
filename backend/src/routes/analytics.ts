@@ -4,6 +4,7 @@ import * as path from 'path';
 import { supabase } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import { getCacheStats, resetCacheStats } from '../utils/semanticCache';
+import { estimateLogCost } from '../utils/pricingHelper';
 
 const analytics = new Hono();
 
@@ -118,7 +119,7 @@ analytics.get('/:projectId', async (c) => {
         totalTokens += log.total_tokens || 0;
         totalPromptTokens += log.prompt_tokens || 0;
         totalCompletionTokens += log.completion_tokens || 0;
-        const logCostUsd = Number(log.total_cost_usd || 0);
+        const logCostUsd = estimateLogCost(log);
         const isCache = log.provider === 'cache';
         const billingType = isCache ? 'free' : (log.upstream_key_id ? billingTypeByKeyId.get(log.upstream_key_id) || 'paid' : 'paid');
         if (billingType === 'free') {
@@ -147,6 +148,11 @@ analytics.get('/:projectId', async (c) => {
     const averageLatency = latencyCount > 0 ? Math.round(totalLatency / latencyCount) : 0;
     const successRate = totalRequests > 0 ? Math.round((successfulRequests / totalRequests) * 100) : 0;
 
+    const sanitizedRecentLogs = (recentLogs || []).map((log: any) => ({
+        ...log,
+        total_cost_usd: estimateLogCost(log),
+    }));
+
     return c.json({
         stats: {
             totalRequests,
@@ -162,7 +168,7 @@ analytics.get('/:projectId', async (c) => {
         },
         providerUsage,
         modelUsage,
-        recentLogs
+        recentLogs: sanitizedRecentLogs
     });
 });
 

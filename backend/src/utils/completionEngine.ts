@@ -18,6 +18,7 @@ import { resolveModelOrHeal, HealingResult } from './modelHealing';
 import { notifyNewRequest } from './dashboardEvents';
 import { canPassCircuit, recordCircuitSuccess, recordCircuitFailure } from './circuitBreaker';
 import { dispatchAlert } from './alertDispatcher';
+import { getFallbackMarketPricing, getModelLookupCandidates, calculateTokenCost } from './pricingHelper';
 
 export type UsageBreakdown = {
     prompt_tokens: number;
@@ -166,75 +167,56 @@ export async function getCachedUpstreamMetadata(ids: string[]): Promise<Record<s
 const pricingCache = new Map<string, { data: PricingMatch | null; expiresAt: number }>();
 const PRICING_TTL_MS = 300_000;
 
-export async function getPricingForModel(model: string, provider: string | null): Promise<PricingMatch | null> {
+export async function getPricingForModel(model: string, provider: string | null): Promise<PricingMatch> {
     const cacheKey = `${model}:${provider || '*'}`;
     const cached = pricingCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (cached && cached.expiresAt > Date.now() && cached.data) {
         return cached.data;
     }
 
-    const { data, error } = await supabase
-        .from('model_pricing')
-        .select('provider, model_name, input_price_per_1m, output_price_per_1m, is_active')
-        .eq('model_name', model)
-        .eq('is_active', true)
-        .in('provider', provider ? [provider, '*'] : ['*']);
+    const candidates = getModelLookupCandidates(model);
 
-    if (error) {
-        const timestamp = new Date().toISOString();
-        console.error(`[${timestamp}] Pricing lookup failed:`, error);
-        return null;
+    try {
+        const { data, error } = await supabase
+            .from('model_pricing')
+            .select('provider, model_name, input_price_per_1m, output_price_per_1m, is_active')
+            .in('model_name', candidates)
+            .eq('is_active', true)
+            .in('provider', provider ? [provider, '*'] : ['*']);
+
+        if (!error && data && data.length > 0) {
+            const exact = provider ? data.find((row: any) => row.provider === provider) : null;
+            const fallback = data.find((row: any) => row.provider === '*');
+            const match = exact || fallback || data[0];
+            if (match) {
+                const result: PricingMatch = {
+                    provider: match.provider,
+                    model_name: match.model_name,
+                    input_price_per_1m: Number(match.input_price_per_1m || 0),
+                    output_price_per_1m: Number(match.output_price_per_1m || 0),
+                };
+                pricingCache.set(cacheKey, { data: result, expiresAt: Date.now() + PRICING_TTL_MS });
+                return result;
+            }
+        }
+    } catch (err) {
+        console.error('Pricing lookup error:', err);
     }
 
-    if (!data || data.length === 0) {
-        pricingCache.set(cacheKey, { data: null, expiresAt: Date.now() + PRICING_TTL_MS });
-        return null;
-    }
-
-    const exact = provider ? data.find((row: any) => row.provider === provider) : null;
-    const fallback = data.find((row: any) => row.provider === '*');
-    const match = exact || fallback;
-    if (!match) {
-        pricingCache.set(cacheKey, { data: null, expiresAt: Date.now() + PRICING_TTL_MS });
-        return null;
-    }
-
-    const result: PricingMatch = {
-        provider: match.provider,
-        model_name: match.model_name,
-        input_price_per_1m: Number(match.input_price_per_1m || 0),
-        output_price_per_1m: Number(match.output_price_per_1m || 0),
-    };
-    pricingCache.set(cacheKey, { data: result, expiresAt: Date.now() + PRICING_TTL_MS });
-    return result;
-}
-
-function roundUsd(value: number): number {
-    return Number(value.toFixed(8));
+    // Comprehensive standard market rates fallback so NO model is ever priced at $0
+    const fallbackPricing = getFallbackMarketPricing(model, provider);
+    pricingCache.set(cacheKey, { data: fallbackPricing, expiresAt: Date.now() + PRICING_TTL_MS });
+    return fallbackPricing;
 }
 
 export async function buildCostFields(model: string, provider: string | null, promptTokens: number, completionTokens: number) {
     const pricing = await getPricingForModel(model, provider);
-    if (!pricing) {
-        return {
-            input_cost_usd: 0,
-            output_cost_usd: 0,
-            total_cost_usd: 0,
-            pricing_provider: null,
-            pricing_model_name: null,
-            pricing_input_per_1m: null,
-            pricing_output_per_1m: null,
-        };
-    }
-
-    const input_cost_usd = roundUsd((promptTokens / 1_000_000) * pricing.input_price_per_1m);
-    const output_cost_usd = roundUsd((completionTokens / 1_000_000) * pricing.output_price_per_1m);
-    const total_cost_usd = roundUsd(input_cost_usd + output_cost_usd);
+    const cost = calculateTokenCost(model, provider, promptTokens, completionTokens, promptTokens + completionTokens, pricing);
 
     return {
-        input_cost_usd,
-        output_cost_usd,
-        total_cost_usd,
+        input_cost_usd: cost.input_cost_usd,
+        output_cost_usd: cost.output_cost_usd,
+        total_cost_usd: cost.total_cost_usd,
         pricing_provider: pricing.provider,
         pricing_model_name: pricing.model_name,
         pricing_input_per_1m: pricing.input_price_per_1m,
@@ -808,6 +790,8 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 recordTokensSaved(totalTok);
             }
 
+            const cacheCost = await buildCostFields(requestedModel, null, promptTok, compTok);
+
             // Insert cache hit log into telemetry
             insertRequestLog({
                 project_id: gatewayKey.project_id,
@@ -820,9 +804,9 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 total_tokens: totalTok,
                 prompt_tokens: promptTok,
                 completion_tokens: compTok,
-                total_cost_usd: 0,
-                input_cost_usd: 0,
-                output_cost_usd: 0,
+                total_cost_usd: cacheCost.total_cost_usd,
+                input_cost_usd: cacheCost.input_cost_usd,
+                output_cost_usd: cacheCost.output_cost_usd,
             }).catch((err) => {
                 console.error('[SemanticCache] Failed to log cache hit:', err);
             });
