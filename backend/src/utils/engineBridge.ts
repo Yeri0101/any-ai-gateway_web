@@ -42,6 +42,7 @@ export interface EngineConfig {
     fusionDefaultModels?: string[];
     fusionDefaultJudge?: string;
     fusionSlotProjects?: string[];
+    strictFreeTierMode?: boolean;
 }
 
 const DEFAULT_ENGINE_CONFIG: EngineConfig = {

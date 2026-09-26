@@ -60,16 +60,25 @@ v1.get('/models', async (c) => {
     });
 
     // Always include virtual meta-models
-    modelList.push({
-        id: 'fusion',
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'tiermax-consensus',
-        permission: [],
-        root: 'fusion',
-        parent: null,
-        replaces: undefined,
-    });
+    const virtualModels = [
+        { id: 'fusion', desc: 'Virtual Consensus Fusion (Default active in Dashboard)' },
+        { id: 'fusion-reasoning', desc: 'Virtual Consensus Fusion (🧠 Reasoning Trio)' },
+        { id: 'fusion-speed', desc: 'Virtual Consensus Fusion (⚡ Speed & Free)' },
+        { id: 'fusion-frontier', desc: 'Virtual Consensus Fusion (🌐 Frontier Mix)' },
+        { id: 'openclaw/fusion', desc: 'OpenClaw Virtual Fusion Alias' }
+    ];
+    for (const vm of virtualModels) {
+        modelList.push({
+            id: vm.id,
+            object: 'model',
+            created: Math.floor(Date.now() / 1000),
+            owned_by: 'tiermax-consensus',
+            permission: [],
+            root: vm.id,
+            parent: null,
+            replaces: undefined,
+        });
+    }
 
     if (modelList.length === 1) {
         modelList.push(
@@ -317,7 +326,11 @@ v1.post('/chat/completions', async (c) => {
             requestedModel.endsWith('/fusion') ||
             requestedModel.startsWith('fusion:') ||
             requestedModel.startsWith('openclaw/fusion:') ||
-            requestedModel.includes('/fusion:');
+            requestedModel.includes('/fusion:') ||
+            requestedModel.startsWith('fusion-') ||
+            requestedModel.startsWith('openclaw/fusion-') ||
+            requestedModel.startsWith('fusion/') ||
+            requestedModel.startsWith('openclaw/fusion/');
 
         if (isFusionModel) {
             if (body.stream) {
@@ -431,7 +444,11 @@ v1.post('/messages', async (c) => {
             requestedModel.endsWith('/fusion') ||
             requestedModel.startsWith('fusion:') ||
             requestedModel.startsWith('openclaw/fusion:') ||
-            requestedModel.includes('/fusion:');
+            requestedModel.includes('/fusion:') ||
+            requestedModel.startsWith('fusion-') ||
+            requestedModel.startsWith('openclaw/fusion-') ||
+            requestedModel.startsWith('fusion/') ||
+            requestedModel.startsWith('openclaw/fusion/');
 
         if (isFusionModel) {
             const openAIBody = anthropicToOpenAI(anthropicBody);

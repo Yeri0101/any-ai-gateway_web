@@ -73,7 +73,7 @@ const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
  * Curated living benchmark intelligence matrix (Artificial Analysis 2026 & OpenRouter verified).
  * Provides rock-solid, audited fallbacks even if the Manager LLM is offline.
  */
-const BASE_2026_BENCHMARK_MATRIX: {
+export const BASE_2026_BENCHMARK_MATRIX: {
     free_tier: TierRecommendations;
     free_training_tier: TierRecommendations;
     paid_tier: TierRecommendations;

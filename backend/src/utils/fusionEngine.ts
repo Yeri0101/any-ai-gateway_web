@@ -30,6 +30,7 @@ export interface FusionExecuteOptions {
 }
 
 import { getEngineConfig } from './engineBridge';
+import { BASE_2026_BENCHMARK_MATRIX, FusionTier } from './aiModelAdvisor';
 
 /**
  * Default fast & diverse panel candidates in TierMax
@@ -54,8 +55,49 @@ const DEFAULT_FUSION_PANEL = [
 export function selectFusionPanel(gatewayKey: any, body?: any): { panel: string[]; judge: string } {
     let manualModels: string[] = [];
 
-    // 1. Check if model name has inline syntax: "fusion:model1,model2,model3"
     const requestedModel = (body?.model || '').trim();
+    const reqLower = requestedModel.toLowerCase();
+
+    // 0. Check for named mode presets (e.g. fusion:reasoning, fusion-speed, openclaw/fusion-frontier)
+    if (reqLower.startsWith('fusion') || reqLower.startsWith('openclaw/fusion')) {
+        let matchedMode: 'reasoning' | 'speed' | 'frontier' | null = null;
+        if (reqLower.includes('reasoning')) matchedMode = 'reasoning';
+        else if (reqLower.includes('speed')) matchedMode = 'speed';
+        else if (reqLower.includes('frontier')) matchedMode = 'frontier';
+
+        if (matchedMode) {
+            let tier: FusionTier = 'free_training';
+            if (reqLower.includes('paid') || reqLower.includes('premium')) {
+                tier = 'paid';
+            } else if (reqLower.includes('safe') || reqLower.includes('strict')) {
+                tier = 'free';
+            } else {
+                try {
+                    const engineConfig = getEngineConfig(false);
+                    if (engineConfig?.strictFreeTierMode) {
+                        tier = 'free';
+                    }
+                } catch (_) {}
+            }
+
+            const tierMatrix = tier === 'free'
+                ? BASE_2026_BENCHMARK_MATRIX.free_tier
+                : tier === 'paid'
+                ? BASE_2026_BENCHMARK_MATRIX.paid_tier
+                : BASE_2026_BENCHMARK_MATRIX.free_training_tier;
+
+            const preset = tierMatrix[matchedMode]?.v1_gold;
+            if (preset) {
+                const judge = (body?.fusion_judge || body?.judge || preset.judge || preset.draft_a).trim();
+                return {
+                    panel: [preset.draft_a, preset.draft_b, preset.draft_c],
+                    judge
+                };
+            }
+        }
+    }
+
+    // 1. Check if model name has inline syntax: "fusion:model1,model2,model3"
     if (requestedModel.includes(':') && (requestedModel.startsWith('fusion:') || requestedModel.startsWith('openclaw/fusion:'))) {
         const parts = requestedModel.split(':')[1]?.split(',').map((s: string) => s.trim()).filter(Boolean);
         if (parts && parts.length > 0) {
