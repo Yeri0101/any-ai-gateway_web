@@ -25,8 +25,7 @@ gatewayKeys.get('/', async (c) => {
         const key_preview = key.length > 9
             ? `${key.slice(0, 4)}...${key.slice(-5)}`
             : `${key.slice(0, 4)}...`;
-        const { api_key: _removed, ...rest } = row;
-        return { ...rest, key_preview };
+        return { ...row, key_preview };
     });
 
     return c.json(sanitized);

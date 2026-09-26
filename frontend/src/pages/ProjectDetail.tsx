@@ -5,7 +5,7 @@ import {
     KeyRound, Server, ChevronLeft, Trash2, Plus, RefreshCw,
     Activity, Pause, Play, Zap, Shield, Download, AlertTriangle,
     CheckCircle2, XCircle, Clock, Cpu, Sliders, Edit2, Save, X, DollarSign, ChevronDown,
-    Wrench, History, ArrowRight
+    Wrench, History, ArrowRight, Copy
 } from 'lucide-react';
 import { useLanguage } from '../i18n';
 import { useToast } from '../ToastContext';
@@ -689,6 +689,21 @@ export default function ProjectDetail() {
         setTestResults(prev => ({ ...prev, [gatewayKey.id]: null }));
 
         try {
+            // Resolve active API key (fallback to reveal endpoint if sanitized)
+            let activeApiKey = gatewayKey.api_key;
+            if (!activeApiKey) {
+                try {
+                    const revealed = await fetchApi(`/gateway-keys/${gatewayKey.id}/reveal`);
+                    if (revealed?.api_key) activeApiKey = revealed.api_key;
+                } catch { /* skip */ }
+            }
+
+            if (!activeApiKey) {
+                toast.error('No se pudo resolver la clave de API para la prueba.');
+                setTestLoading(prev => ({ ...prev, [gatewayKey.id]: false }));
+                return;
+            }
+
             // ── STT: speech-to-text ─────────────────────────────────────
             if (isSttModel(model)) {
                 const audioFile = audioFiles[gatewayKey.id];
@@ -702,7 +717,7 @@ export default function ProjectDetail() {
                 form.set('file', audioFile, audioFile.name);
                 const res = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${gatewayKey.api_key}` },
+                    headers: { 'Authorization': `Bearer ${activeApiKey}` },
                     body: form,
                 });
                 const data = await res.json();
@@ -715,7 +730,7 @@ export default function ProjectDetail() {
                 const voice = ttsVoice[gatewayKey.id] || 'alloy';
                 const res = await fetch(`${baseUrl}/v1/audio/speech`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${gatewayKey.api_key}` },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeApiKey}` },
                     body: JSON.stringify({ model, input, voice, response_format: 'mp3' }),
                 });
                 if (!res.ok) {
@@ -733,7 +748,7 @@ export default function ProjectDetail() {
                 if (!prompt) { toast.warning('Escribe un mensaje de prueba.'); setTestLoading(prev => ({ ...prev, [gatewayKey.id]: false })); return; }
                 const res = await fetch(`${baseUrl}/v1/chat/completions`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${gatewayKey.api_key}` },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeApiKey}` },
                     body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }] }),
                 });
                 const data = await res.json();
@@ -1516,7 +1531,32 @@ export default function ProjectDetail() {
                                             </div>
 
                                             {/* API Key */}
-                                            <code className="key-display" style={{ marginBottom: '1rem', display: 'block' }}>{g.api_key}</code>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                                                <code className="key-display" style={{ flex: 1, margin: 0 }}>{g.api_key || g.key_preview || '•••'}</code>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary btn-sm"
+                                                    style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                                                    onClick={async () => {
+                                                        let keyToCopy = g.api_key;
+                                                        if (!keyToCopy) {
+                                                            try {
+                                                                const rev = await fetchApi(`/gateway-keys/${g.id}/reveal`);
+                                                                keyToCopy = rev?.api_key;
+                                                            } catch { /* skip */ }
+                                                        }
+                                                        if (keyToCopy) {
+                                                            navigator.clipboard.writeText(keyToCopy);
+                                                            toast.success('Clave copiada al portapapeles');
+                                                        } else {
+                                                            toast.error('No se pudo copiar la clave');
+                                                        }
+                                                    }}
+                                                    title="Copiar API Key"
+                                                >
+                                                    <Copy size={13} />
+                                                </button>
+                                            </div>
 
                                             {/* Models */}
                                             <div style={{ marginBottom: '1rem' }}>
