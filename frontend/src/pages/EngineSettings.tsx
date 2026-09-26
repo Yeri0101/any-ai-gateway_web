@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { fetchApi } from '../api';
 import {
-    Check, AlertCircle, RefreshCw, Save, ExternalLink, Play
+    Check, AlertCircle, RefreshCw, Save, ExternalLink, Play, Sparkles, Award, Zap, ShieldCheck, ChevronRight
 } from 'lucide-react';
 import { DualEngineGlyph, PromptAnchorGlyph, RateGuardianGlyph, ProviderIcon, RouterCascadeGlyph } from '../components/Icons';
 import { useLanguage } from '../i18n';
@@ -80,6 +80,14 @@ export default function EngineSettings() {
     // Virtual Consensus Fusion Slots: 0: Draft A, 1: Draft B, 2: Draft C, 3: Judge
     const [fusionSlotKeys, setFusionSlotKeys] = useState<string[]>(['', '', '', '']);
     const [fusionSlotManual, setFusionSlotManual] = useState<boolean[]>([false, false, false, false]);
+
+    // Frontier AI Model Advisor states
+    const [fusionTier, setFusionTier] = useState<'free' | 'paid'>('free');
+    const [fusionMode, setFusionMode] = useState<'reasoning' | 'speed' | 'frontier'>('reasoning');
+    const [advisorData, setAdvisorData] = useState<any>(null);
+    const [loadingAdvisor, setLoadingAdvisor] = useState(false);
+    const [applyingPreset, setApplyingPreset] = useState(false);
+    const [presetFeedback, setPresetFeedback] = useState<{ type: 'success' | 'error'; message: string; details?: any } | null>(null);
 
     // Testing states
     const [testingJev, setTestingJev] = useState(false);
@@ -250,14 +258,18 @@ export default function EngineSettings() {
     const loadConfig = async () => {
         try {
             setLoading(true);
-            const [data, projectsData, providersData] = await Promise.all([
+            const [data, projectsData, providersData, advisorRes] = await Promise.all([
                 fetchApi('/engine/config').catch(() => null),
                 fetchApi('/projects').catch(() => []),
                 fetchApi('/providers').catch(() => []),
+                fetchApi('/engine/fusion-advisor').catch(() => null),
             ]);
 
             setProjects(projectsData || []);
             setUpstreamKeys(providersData || []);
+            if (advisorRes && advisorRes.ok) {
+                setAdvisorData(advisorRes);
+            }
 
             if (data) {
                 setConfig(data);
@@ -300,6 +312,82 @@ export default function EngineSettings() {
             console.error('Failed to load engine config:', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadAdvisorData = async (forceRefresh = false) => {
+        setLoadingAdvisor(true);
+        try {
+            const data = await fetchApi(`/engine/fusion-advisor${forceRefresh ? '?refresh=true' : ''}`);
+            if (data && data.ok) {
+                setAdvisorData(data);
+            }
+        } catch (err: any) {
+            console.warn('[EngineSettings] Failed to fetch fusion advisor:', err);
+        } finally {
+            setLoadingAdvisor(false);
+        }
+    };
+
+    const handleApplySmartPreset = async (
+        mode: 'reasoning' | 'speed' | 'frontier',
+        version?: 'v1_gold' | 'v2_silver' | 'v3_bronze'
+    ) => {
+        setApplyingPreset(true);
+        setPresetFeedback(null);
+        try {
+            const body: any = {
+                tier: fusionTier,
+                mode,
+                autoFallback: true
+            };
+            if (version) {
+                body.version = version;
+            }
+            const res = await fetchApi('/engine/apply-fusion-preset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (res && res.success && res.applied) {
+                const applied = res.applied;
+                setConfig(prev => ({
+                    ...prev,
+                    fusionDefaultModels: applied.models,
+                    fusionDefaultJudge: applied.judge,
+                    fusionSlotProjects: applied.slotProjects || prev.fusionSlotProjects
+                }));
+
+                if (applied.slotProjects && Array.isArray(applied.slotProjects)) {
+                    setFusionSlotKeys(applied.slotProjects);
+                    setFusionSlotManual([false, false, false, false]);
+                    applied.slotProjects.forEach((src: string) => {
+                        if (src) fetchModelsForKey(src);
+                    });
+                }
+
+                const verName = applied.versionUsed === 'v1_gold' ? 'V1 Oro' : applied.versionUsed === 'v2_silver' ? 'V2 Plata' : 'V3 Bronce';
+                setPresetFeedback({
+                    type: 'success',
+                    message: `${applied.preset?.label || mode.toUpperCase()} (${verName}): ${t('engine.fusion_preset_applied') || 'Preset aplicado y verificado con sonda de 1 token.'}`,
+                    details: applied
+                });
+
+                setTimeout(() => setPresetFeedback(null), 8000);
+            } else {
+                setPresetFeedback({
+                    type: 'error',
+                    message: res?.error || t('engine.fusion_preset_error') || 'Error al aplicar el preset.'
+                });
+            }
+        } catch (err: any) {
+            setPresetFeedback({
+                type: 'error',
+                message: err.message || t('engine.fusion_preset_error') || 'Error al aplicar el preset.'
+            });
+        } finally {
+            setApplyingPreset(false);
         }
     };
 
@@ -899,52 +987,6 @@ export default function EngineSettings() {
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
                         <button
                             type="button"
-                            onClick={() => {
-                                setConfig(prev => ({
-                                    ...prev,
-                                    fusionDefaultModels: ['deepseek-chat', 'qwen/qwen3.8-27b', 'meta/llama-3.3-70b-instruct'],
-                                    fusionDefaultJudge: 'deepseek-chat'
-                                }));
-                            }}
-                            className="btn btn-secondary btn-sm"
-                            style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem' }}
-                            title="Terna de alto razonamiento lógico y código"
-                        >
-                            🧠 Reasoning Trio
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setConfig(prev => ({
-                                    ...prev,
-                                    fusionDefaultModels: ['gemini-2.5-flash', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile'],
-                                    fusionDefaultJudge: 'gemini-2.5-flash'
-                                }));
-                            }}
-                            className="btn btn-secondary btn-sm"
-                            style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem' }}
-                            title="Terna de alta velocidad para capas gratuitas"
-                        >
-                            ⚡ Speed & Free
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setConfig(prev => ({
-                                    ...prev,
-                                    fusionDefaultModels: ['deepseek-chat', 'moonshotai/kimi-k3', 'minimaxai/minimax-m3'],
-                                    fusionDefaultJudge: 'deepseek-chat'
-                                }));
-                            }}
-                            className="btn btn-secondary btn-sm"
-                            style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem' }}
-                            title="Terna multi-proveedor asiático de frontera"
-                        >
-                            🌐 Frontier Mix
-                        </button>
-
-                        <button
-                            type="button"
                             onClick={() => handleSave()}
                             disabled={saving}
                             className="btn btn-primary btn-sm"
@@ -962,6 +1004,349 @@ export default function EngineSettings() {
                             <span>{t('engine.save_config')}</span>
                         </button>
                     </div>
+                </div>
+
+                {/* Preset Apply Feedback Notification */}
+                {presetFeedback && (
+                    <div style={{
+                        padding: '0.65rem 0.9rem',
+                        borderRadius: 8,
+                        background: presetFeedback.type === 'success' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                        border: `1px solid ${presetFeedback.type === 'success' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                        color: presetFeedback.type === 'success' ? '#22c55e' : '#ef4444',
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.35rem'
+                    }}>
+                        <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: '0.4rem' }}>
+                            <div className="flex items-center gap-2" style={{ fontWeight: 700 }}>
+                                {presetFeedback.type === 'success' ? <ShieldCheck size={16} /> : <AlertCircle size={16} />}
+                                <span>{presetFeedback.message}</span>
+                            </div>
+                            {presetFeedback.details?.testedOk && (
+                                <span style={{
+                                    fontSize: '0.68rem',
+                                    background: 'rgba(34,197,94,0.2)',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: 12,
+                                    border: '1px solid rgba(34,197,94,0.4)',
+                                    color: '#4ade80',
+                                    fontWeight: 700
+                                }}>
+                                    ✓ {t('engine.fusion_verified_badge') || '1-Token Probe Verified'}
+                                </span>
+                            )}
+                        </div>
+                        {presetFeedback.details && (
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                                Draft A: <b style={{ color: 'var(--text-primary)' }}>{presetFeedback.details.models?.[0]}</b> |
+                                {' '}Draft B: <b style={{ color: 'var(--text-primary)' }}>{presetFeedback.details.models?.[1]}</b> |
+                                {' '}Draft C: <b style={{ color: 'var(--text-primary)' }}>{presetFeedback.details.models?.[2]}</b> |
+                                {' '}Juez: <b style={{ color: 'var(--text-primary)' }}>{presetFeedback.details.judge}</b>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Frontier Model Intelligence Advisor Card */}
+                <div style={{
+                    background: 'radial-gradient(ellipse at top, rgba(139, 92, 246, 0.08), transparent 70%), var(--surface-1)',
+                    border: '1px solid rgba(139, 92, 246, 0.25)',
+                    borderRadius: 10,
+                    padding: '1.15rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.9rem'
+                }}>
+                    {/* Advisor Header & Live Sources */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div className="flex items-center gap-2">
+                            <Sparkles size={16} color="#a855f7" />
+                            <span style={{ fontWeight: 800, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                                {t('engine.fusion_advisor_title') || 'Asesor Inteligente de Modelos Frontera (Benchmarks Vivos 2026)'}
+                            </span>
+                            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '0.66rem', background: 'rgba(168,85,247,0.15)', color: '#c084fc', padding: '0.12rem 0.45rem', borderRadius: 4, fontWeight: 600 }}>
+                                    Artificial Analysis v4.3+
+                                </span>
+                                <span style={{ fontSize: '0.66rem', background: 'rgba(59,130,246,0.15)', color: '#60a5fa', padding: '0.12rem 0.45rem', borderRadius: 4, fontWeight: 600 }}>
+                                    LMSYS Arena 2026
+                                </span>
+                                <span style={{ fontSize: '0.66rem', background: 'rgba(16,185,129,0.15)', color: '#34d399', padding: '0.12rem 0.45rem', borderRadius: 4, fontWeight: 600 }}>
+                                    Live OpenRouter Catalog
+                                </span>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => loadAdvisorData(true)}
+                            disabled={loadingAdvisor}
+                            className="btn btn-secondary btn-sm"
+                            style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem', gap: '0.35rem' }}
+                            title="Consultar catálogos vivos e índices de referencia en tiempo real"
+                        >
+                            <RefreshCw size={12} className={loadingAdvisor ? 'spin' : ''} />
+                            <span>{t('engine.fusion_advisor_refresh') || 'Actualizar Inteligencia'}</span>
+                        </button>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+                        <p style={{ margin: 0, lineHeight: 1.4, flex: 1, minWidth: 260 }}>
+                            {t('engine.fusion_advisor_desc') || 'Motor anti-sesgo y rastreo en vivo de benchmarks para seleccionar automáticamente la terna y el juez óptimos.'}
+                        </p>
+                        {advisorData?.userEcosystem && (
+                            <span style={{ background: 'var(--surface-2)', padding: '0.2rem 0.55rem', borderRadius: 6, border: '1px solid var(--border-subtle)', whiteSpace: 'nowrap' }}>
+                                🔑 <b>{advisorData.userEcosystem.totalKeys}</b> llaves analizadas · <b>{advisorData.userEcosystem.activeModelsCount || 100}+</b> modelos en catálogo
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Tier Switcher + Mode Selection Bar */}
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '0.75rem',
+                        background: 'rgba(0,0,0,0.15)',
+                        padding: '0.5rem 0.75rem',
+                        borderRadius: 8,
+                        border: '1px solid var(--border-subtle)'
+                    }}>
+                        {/* Tier Selector (Free vs Paid) */}
+                        <div style={{ display: 'inline-flex', background: 'var(--surface-2)', padding: '3px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+                            <button
+                                type="button"
+                                onClick={() => setFusionTier('free')}
+                                style={{
+                                    padding: '0.35rem 0.8rem',
+                                    borderRadius: 6,
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    border: 'none',
+                                    background: fusionTier === 'free' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'transparent',
+                                    color: fusionTier === 'free' ? '#fff' : 'var(--text-secondary)',
+                                    transition: 'all 0.15s ease',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.35rem'
+                                }}
+                            >
+                                <Zap size={13} />
+                                <span>{t('engine.fusion_tier_free') || 'Capa Gratuita (Free)'}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFusionTier('paid')}
+                                style={{
+                                    padding: '0.35rem 0.8rem',
+                                    borderRadius: 6,
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    border: 'none',
+                                    background: fusionTier === 'paid' ? 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' : 'transparent',
+                                    color: fusionTier === 'paid' ? '#fff' : 'var(--text-secondary)',
+                                    transition: 'all 0.15s ease',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.35rem'
+                                }}
+                            >
+                                <Award size={13} />
+                                <span>{t('engine.fusion_tier_paid') || 'Capa Premium (Paid)'}</span>
+                            </button>
+                        </div>
+
+                        {/* Mode Selector Buttons */}
+                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            {[
+                                { id: 'reasoning', label: t('engine.fusion_mode_reasoning') || '🧠 Reasoning Trio', title: 'Terna de alto razonamiento lógico, matemáticas y código' },
+                                { id: 'speed', label: t('engine.fusion_mode_speed') || '⚡ Speed & Free', title: 'Terna de ultra-alta velocidad y respuesta instantánea' },
+                                { id: 'frontier', label: t('engine.fusion_mode_frontier') || '🌐 Frontier Mix', title: 'Terna balanceada con los modelos insignia de mayor capacidad general' },
+                            ].map(m => {
+                                const isActive = fusionMode === m.id;
+                                return (
+                                    <button
+                                        key={m.id}
+                                        type="button"
+                                        onClick={() => setFusionMode(m.id as any)}
+                                        className={`btn btn-sm ${isActive ? 'btn-primary' : 'btn-secondary'}`}
+                                        style={{
+                                            fontSize: '0.75rem',
+                                            padding: '0.35rem 0.75rem',
+                                            fontWeight: isActive ? 700 : 500,
+                                            borderColor: isActive ? 'var(--brand-orange)' : undefined,
+                                            background: isActive ? 'var(--brand-orange)' : undefined,
+                                            color: isActive ? '#fff' : undefined,
+                                        }}
+                                        title={m.title}
+                                    >
+                                        {m.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Presets & Auto-Apply Bar */}
+                    {(() => {
+                        const tierKey = fusionTier === 'free' ? 'free_tier' : 'paid_tier';
+                        const currentPresets = advisorData?.[tierKey]?.[fusionMode];
+
+                        return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                {/* Auto-Best One-Click CTA */}
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: '0.6rem',
+                                    background: 'rgba(255,255,255,0.02)',
+                                    padding: '0.65rem 0.85rem',
+                                    borderRadius: 8,
+                                    border: '1px solid var(--border-subtle)'
+                                }}>
+                                    <div style={{ flex: 1, minWidth: 260 }}>
+                                        <div style={{ fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                            <span>{fusionMode === 'reasoning' ? '🧠 Reasoning Trio' : fusionMode === 'speed' ? '⚡ Speed & Free' : '🌐 Frontier Mix'}</span>
+                                            <span style={{
+                                                fontSize: '0.68rem',
+                                                padding: '0.1rem 0.4rem',
+                                                borderRadius: 12,
+                                                fontWeight: 700,
+                                                background: fusionTier === 'free' ? 'rgba(16,185,129,0.15)' : 'rgba(168,85,247,0.15)',
+                                                color: fusionTier === 'free' ? '#34d399' : '#c084fc'
+                                            }}>
+                                                {fusionTier === 'free' ? '⚡ Free Tier (Zero Cost)' : '💎 Premium Tier (Paid)'}
+                                            </span>
+                                        </div>
+                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                                            {currentPresets?.v1_gold?.rationale || 'Sonda automática de 1 token para verificar salud y cuota antes de enlazar proyectos.'}
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => handleApplySmartPreset(fusionMode, undefined)}
+                                        disabled={applyingPreset}
+                                        className="btn btn-primary btn-sm"
+                                        style={{
+                                            fontSize: '0.76rem',
+                                            padding: '0.4rem 0.95rem',
+                                            fontWeight: 700,
+                                            gap: '0.4rem',
+                                            background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                                            border: 'none',
+                                            boxShadow: '0 2px 10px rgba(249,115,22,0.35)'
+                                        }}
+                                        title="Prueba V1 con sonda de 1 token; si está agotado o en cooldown, auto-aplica V2 o V3 sin error"
+                                    >
+                                        {applyingPreset ? <RefreshCw size={13} className="spin" /> : <Sparkles size={13} />}
+                                        <span>{applyingPreset ? (t('engine.fusion_advisor_applying') || 'Sondeando y aplicando...') : (t('engine.fusion_auto_best') || '✨ Auto-Seleccionar Mejor Disponible')}</span>
+                                    </button>
+                                </div>
+
+                                {/* 3 Ranked Fallback Version Cards */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.75rem' }}>
+                                    {[
+                                        { id: 'v1_gold', label: t('engine.fusion_v1_gold') || '🥇 V1 Oro', badgeColor: '#fbbf24', preset: currentPresets?.v1_gold },
+                                        { id: 'v2_silver', label: t('engine.fusion_v2_silver') || '🥈 V2 Plata', badgeColor: '#94a3b8', preset: currentPresets?.v2_silver },
+                                        { id: 'v3_bronze', label: t('engine.fusion_v3_bronze') || '🥉 V3 Bronce', badgeColor: '#b45309', preset: currentPresets?.v3_bronze },
+                                    ].map(v => {
+                                        const p = v.preset;
+                                        if (!p) {
+                                            return (
+                                                <div
+                                                    key={v.id}
+                                                    style={{
+                                                        background: 'var(--surface-2)',
+                                                        border: '1px solid var(--border-subtle)',
+                                                        borderRadius: 8,
+                                                        padding: '0.75rem',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        color: 'var(--text-muted)',
+                                                        fontSize: '0.75rem'
+                                                    }}
+                                                >
+                                                    {loadingAdvisor ? <RefreshCw size={14} className="spin" /> : `${v.label} (Cargando datos...)`}
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <div
+                                                key={v.id}
+                                                style={{
+                                                    background: 'var(--surface-2)',
+                                                    border: '1px solid var(--border-subtle)',
+                                                    borderRadius: 8,
+                                                    padding: '0.75rem',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    justifyContent: 'space-between',
+                                                    gap: '0.55rem'
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                                    <div className="flex items-center justify-between">
+                                                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: v.badgeColor }}>
+                                                            {v.label}
+                                                        </span>
+                                                        {p.key_metrics?.artificialAnalysisScore && (
+                                                            <span style={{ fontSize: '0.67rem', background: 'rgba(255,255,255,0.06)', padding: '0.1rem 0.4rem', borderRadius: 4, color: 'var(--text-muted)' }}>
+                                                                AA: <b>{p.key_metrics.artificialAnalysisScore}</b>
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div style={{ fontSize: '0.72rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                                                            <span style={{ color: 'var(--brand-orange)', fontWeight: 700, minWidth: 16 }}>A:</span>
+                                                            <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.draft_a}</span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                                                            <span style={{ color: 'var(--brand-orange)', fontWeight: 700, minWidth: 16 }}>B:</span>
+                                                            <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.draft_b}</span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                                                            <span style={{ color: 'var(--brand-orange)', fontWeight: 700, minWidth: 16 }}>C:</span>
+                                                            <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.draft_c}</span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', borderTop: '1px dashed var(--border-subtle)', paddingTop: '0.25rem' }}>
+                                                            <span style={{ color: '#c084fc', fontWeight: 700, minWidth: 16 }}>⚖️:</span>
+                                                            <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.judge}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <p style={{ margin: 0, fontSize: '0.67rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                                                        {p.fallback_trigger || p.rationale}
+                                                    </p>
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleApplySmartPreset(fusionMode, v.id as any)}
+                                                    disabled={applyingPreset}
+                                                    className="btn btn-secondary btn-sm"
+                                                    style={{ fontSize: '0.72rem', padding: '0.28rem 0.5rem', width: '100%', justifyContent: 'center', gap: '0.3rem' }}
+                                                >
+                                                    {applyingPreset ? <RefreshCw size={11} className="spin" /> : <ChevronRight size={12} />}
+                                                    <span>Aplicar {v.label.split(' ')[1] || v.label}</span>
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
 
                 {saveSuccess && (

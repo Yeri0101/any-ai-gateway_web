@@ -12,6 +12,7 @@ import {
     getOrCreateKeyState
 } from '../utils/freeTierGuardian';
 import { supabase } from '../db';
+import { adviseFusionPresets, validateAndSelectActivePreset } from '../utils/aiModelAdvisor';
 
 const engineRoutes = new Hono();
 
@@ -223,6 +224,71 @@ engineRoutes.post('/guardian/limits', async (c) => {
 
     const updated = updateCustomLimits(upstreamKeyId, { rpm, tpm, rpd, tpd });
     return c.json({ success: true, updated });
+});
+
+/**
+ * GET /engine/fusion-advisor — Fetch real-time frontier AI advisor recommendations
+ * POST /engine/fusion-advisor — Fetch with forceRefresh flag
+ */
+engineRoutes.get('/fusion-advisor', async (c) => {
+    try {
+        const forceRefresh = c.req.query('refresh') === 'true';
+        const advisor = await adviseFusionPresets(forceRefresh);
+        return c.json(advisor);
+    } catch (err: any) {
+        return c.json({ ok: false, error: err.message }, 500);
+    }
+});
+
+engineRoutes.post('/fusion-advisor', async (c) => {
+    try {
+        const body = await c.req.json().catch(() => ({}));
+        const forceRefresh = body?.forceRefresh === true || body?.refresh === true;
+        const advisor = await adviseFusionPresets(forceRefresh);
+        return c.json(advisor);
+    } catch (err: any) {
+        return c.json({ ok: false, error: err.message }, 500);
+    }
+});
+
+/**
+ * POST /engine/apply-fusion-preset — Validate and auto-apply intelligent fusion trio
+ */
+engineRoutes.post('/apply-fusion-preset', async (c) => {
+    try {
+        const body = await c.req.json().catch(() => ({}));
+        const tier = (body?.tier === 'paid' ? 'paid' : 'free') as 'free' | 'paid';
+        const mode = (body?.mode || 'frontier') as 'reasoning' | 'speed' | 'frontier';
+        const version = body?.version as 'v1_gold' | 'v2_silver' | 'v3_bronze' | undefined;
+        const autoFallback = body?.autoFallback !== false;
+
+        const selection = await validateAndSelectActivePreset(tier, mode, version, autoFallback);
+
+        const appliedConfig = updateEngineConfig({
+            fusionDefaultModels: [selection.preset.draft_a, selection.preset.draft_b, selection.preset.draft_c],
+            fusionDefaultJudge: selection.preset.judge,
+            fusionSlotProjects: selection.preset.slotProjects || ['', '', '', ''],
+        });
+
+        return c.json({
+            success: true,
+            applied: {
+                tier,
+                mode,
+                versionUsed: selection.versionUsed,
+                testedOk: selection.testedOk,
+                errorReason: selection.errorReason,
+                preset: selection.preset,
+                models: [selection.preset.draft_a, selection.preset.draft_b, selection.preset.draft_c],
+                judge: selection.preset.judge,
+                slotProjects: selection.preset.slotProjects,
+                rationale: selection.preset.rationale,
+            },
+            config: appliedConfig,
+        });
+    } catch (err: any) {
+        return c.json({ success: false, error: err.message }, 500);
+    }
 });
 
 export default engineRoutes;
