@@ -438,8 +438,8 @@ export async function executeManagerLLM(
             'Authorization': `Bearer ${apiKey}`,
         };
         if (provider === 'openrouter') {
-            headers['HTTP-Referer'] = 'http://localhost:3000';
-            headers['X-Title'] = 'TierMax Gateway Manager';
+            headers['HTTP-Referer'] = 'https://cursor.com';
+            headers['X-Title'] = 'Cursor Agent';
         }
 
         const res = await fetch(url, {

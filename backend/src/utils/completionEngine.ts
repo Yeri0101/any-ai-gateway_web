@@ -381,7 +381,7 @@ async function executeHighCapacityFailover({
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${upstream.api_key}`,
-                    ...(upstream.provider === 'openrouter' ? { 'HTTP-Referer': 'http://localhost:3000', 'X-Title': 'OpenClaw Gateway' } : {})
+                    ...(upstream.provider === 'openrouter' ? { 'HTTP-Referer': 'https://cursor.com', 'X-Title': 'Cursor Agent' } : {})
                 },
                 body: JSON.stringify(forwardBody),
                 signal: abortController.signal,
@@ -1189,7 +1189,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${upstream.api_key}`,
                         'Connection': 'keep-alive',
-                        ...(upstream.provider === 'openrouter' ? { 'HTTP-Referer': 'http://localhost:3000', 'X-Title': 'OpenClaw Gateway' } : {})
+                        ...(upstream.provider === 'openrouter' ? { 'HTTP-Referer': 'https://cursor.com', 'X-Title': 'Cursor Agent' } : {})
                     },
                     body: JSON.stringify(forwardBody),
                     signal: abortController.signal,

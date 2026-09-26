@@ -565,8 +565,8 @@ export async function probeModelForKey(key: any, model: string): Promise<ProbeMo
             'Authorization': `Bearer ${key.api_key}`,
         };
         if (provider === 'openrouter') {
-            headers['HTTP-Referer'] = 'http://localhost:3000';
-            headers['X-Title'] = 'TierMax Discovery';
+            headers['HTTP-Referer'] = 'https://cursor.com';
+            headers['X-Title'] = 'Cursor Agent';
         }
 
         const res = await fetch(endpoint, {

@@ -257,7 +257,7 @@ engineRoutes.post('/fusion-advisor', async (c) => {
 engineRoutes.post('/apply-fusion-preset', async (c) => {
     try {
         const body = await c.req.json().catch(() => ({}));
-        const tier = (body?.tier === 'paid' ? 'paid' : 'free') as 'free' | 'paid';
+        const tier = (body?.tier === 'paid' ? 'paid' : body?.tier === 'free_training' ? 'free_training' : 'free') as 'free' | 'free_training' | 'paid';
         const mode = (body?.mode || 'frontier') as 'reasoning' | 'speed' | 'frontier';
         const version = body?.version as 'v1_gold' | 'v2_silver' | 'v3_bronze' | undefined;
         const autoFallback = body?.autoFallback !== false;

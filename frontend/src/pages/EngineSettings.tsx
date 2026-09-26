@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { fetchApi } from '../api';
 import {
-    Check, AlertCircle, RefreshCw, Save, ExternalLink, Play, Sparkles, Award, Zap, ShieldCheck, ChevronRight
+    Check, AlertCircle, RefreshCw, Save, ExternalLink, Play, Sparkles, Award, ShieldCheck, ChevronRight, Flame
 } from 'lucide-react';
 import { DualEngineGlyph, PromptAnchorGlyph, RateGuardianGlyph, ProviderIcon, RouterCascadeGlyph } from '../components/Icons';
 import { useLanguage } from '../i18n';
@@ -82,7 +82,7 @@ export default function EngineSettings() {
     const [fusionSlotManual, setFusionSlotManual] = useState<boolean[]>([false, false, false, false]);
 
     // Frontier AI Model Advisor states
-    const [fusionTier, setFusionTier] = useState<'free' | 'paid'>('free');
+    const [fusionTier, setFusionTier] = useState<'free' | 'free_training' | 'paid'>('free');
     const [fusionMode, setFusionMode] = useState<'reasoning' | 'speed' | 'frontier'>('reasoning');
     const [advisorData, setAdvisorData] = useState<any>(null);
     const [loadingAdvisor, setLoadingAdvisor] = useState(false);
@@ -1115,15 +1115,15 @@ export default function EngineSettings() {
                         borderRadius: 8,
                         border: '1px solid var(--border-subtle)'
                     }}>
-                        {/* Tier Selector (Free vs Paid) */}
-                        <div style={{ display: 'inline-flex', background: 'var(--surface-2)', padding: '3px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+                        {/* Tier Selector (Free vs Free Training vs Paid) */}
+                        <div style={{ display: 'inline-flex', background: 'var(--surface-2)', padding: '3px', borderRadius: 8, border: '1px solid var(--border-subtle)', flexWrap: 'wrap', gap: '2px' }}>
                             <button
                                 type="button"
                                 onClick={() => setFusionTier('free')}
                                 style={{
-                                    padding: '0.35rem 0.8rem',
+                                    padding: '0.35rem 0.75rem',
                                     borderRadius: 6,
-                                    fontSize: '0.75rem',
+                                    fontSize: '0.74rem',
                                     fontWeight: 700,
                                     cursor: 'pointer',
                                     border: 'none',
@@ -1135,16 +1135,37 @@ export default function EngineSettings() {
                                     gap: '0.35rem'
                                 }}
                             >
-                                <Zap size={13} />
-                                <span>{t('engine.fusion_tier_free') || 'Capa Gratuita (Free)'}</span>
+                                <ShieldCheck size={13} />
+                                <span>{t('engine.fusion_tier_free') || 'Capa Gratuita Segura'}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFusionTier('free_training')}
+                                style={{
+                                    padding: '0.35rem 0.75rem',
+                                    borderRadius: 6,
+                                    fontSize: '0.74rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    border: 'none',
+                                    background: fusionTier === 'free_training' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
+                                    color: fusionTier === 'free_training' ? '#fff' : 'var(--text-secondary)',
+                                    transition: 'all 0.15s ease',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.35rem'
+                                }}
+                            >
+                                <Flame size={13} />
+                                <span>{t('engine.fusion_tier_free_training') || 'Permite Entreno (550B+)'}</span>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setFusionTier('paid')}
                                 style={{
-                                    padding: '0.35rem 0.8rem',
+                                    padding: '0.35rem 0.75rem',
                                     borderRadius: 6,
-                                    fontSize: '0.75rem',
+                                    fontSize: '0.74rem',
                                     fontWeight: 700,
                                     cursor: 'pointer',
                                     border: 'none',
@@ -1192,9 +1213,40 @@ export default function EngineSettings() {
                         </div>
                     </div>
 
+                    {/* Opt-In Training Guidance Notice */}
+                    {fusionTier === 'free_training' && (
+                        <div style={{
+                            background: 'rgba(245, 158, 11, 0.08)',
+                            border: '1px solid rgba(245, 158, 11, 0.25)',
+                            borderRadius: 8,
+                            padding: '0.55rem 0.85rem',
+                            fontSize: '0.73rem',
+                            color: '#fbbf24',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '0.5rem'
+                        }}>
+                            <div className="flex items-center gap-2" style={{ flex: 1, minWidth: 260 }}>
+                                <Flame size={15} color="#f59e0b" />
+                                <span>{t('engine.fusion_training_warning')}</span>
+                            </div>
+                            <a
+                                href="https://openrouter.ai/settings/privacy"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: '#fbbf24', textDecoration: 'underline', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                            >
+                                <span>Configuración de Privacidad OpenRouter</span>
+                                <ExternalLink size={12} />
+                            </a>
+                        </div>
+                    )}
+
                     {/* Presets & Auto-Apply Bar */}
                     {(() => {
-                        const tierKey = fusionTier === 'free' ? 'free_tier' : 'paid_tier';
+                        const tierKey = fusionTier === 'free' ? 'free_tier' : (fusionTier === 'free_training' ? 'free_training_tier' : 'paid_tier');
                         const currentPresets = advisorData?.[tierKey]?.[fusionMode];
 
                         return (
@@ -1216,13 +1268,19 @@ export default function EngineSettings() {
                                             <span>{fusionMode === 'reasoning' ? '🧠 Reasoning Trio' : fusionMode === 'speed' ? '⚡ Speed & Free' : '🌐 Frontier Mix'}</span>
                                             <span style={{
                                                 fontSize: '0.68rem',
-                                                padding: '0.1rem 0.4rem',
+                                                padding: '0.1rem 0.45rem',
                                                 borderRadius: 12,
                                                 fontWeight: 700,
-                                                background: fusionTier === 'free' ? 'rgba(16,185,129,0.15)' : 'rgba(168,85,247,0.15)',
-                                                color: fusionTier === 'free' ? '#34d399' : '#c084fc'
+                                                background: fusionTier === 'free'
+                                                    ? 'rgba(16,185,129,0.15)'
+                                                    : (fusionTier === 'free_training' ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)'),
+                                                color: fusionTier === 'free'
+                                                    ? '#34d399'
+                                                    : (fusionTier === 'free_training' ? '#fbbf24' : '#c084fc')
                                             }}>
-                                                {fusionTier === 'free' ? '⚡ Free Tier (Zero Cost)' : '💎 Premium Tier (Paid)'}
+                                                {fusionTier === 'free'
+                                                    ? '⚡ Free Tier (Strict Privacy)'
+                                                    : (fusionTier === 'free_training' ? '🚀 Free Tier (Opt-In Training 550B+)' : '💎 Premium Tier (Paid)')}
                                             </span>
                                         </div>
                                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>

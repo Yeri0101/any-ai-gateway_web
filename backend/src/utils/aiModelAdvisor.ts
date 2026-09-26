@@ -46,11 +46,14 @@ export interface TierRecommendations {
     frontier: FusionModePresets;
 }
 
+export type FusionTier = 'free' | 'free_training' | 'paid';
+
 export interface AdvisorResponse {
     ok: boolean;
     verified_at: string;
     source: 'manager_llm' | 'live_benchmark_matrix';
     free_tier: TierRecommendations;
+    free_training_tier: TierRecommendations;
     paid_tier: TierRecommendations;
     userEcosystem: {
         totalKeys: number;
@@ -70,65 +73,69 @@ const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
  * Curated living benchmark intelligence matrix (Artificial Analysis 2026 & OpenRouter verified).
  * Provides rock-solid, audited fallbacks even if the Manager LLM is offline.
  */
-const BASE_2026_BENCHMARK_MATRIX: { free_tier: TierRecommendations; paid_tier: TierRecommendations } = {
+const BASE_2026_BENCHMARK_MATRIX: {
+    free_tier: TierRecommendations;
+    free_training_tier: TierRecommendations;
+    paid_tier: TierRecommendations;
+} = {
     free_tier: {
         reasoning: {
             v1_gold: {
                 versionId: 'v1_gold',
-                label: 'Oro (Thinking Machines Inkling / Nemotron 3 Ultra / Qwen 3.8)',
-                draft_a: 'thinkingmachines/inkling:free',
-                draft_b: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-                draft_c: 'qwen/qwen3.8-27b:free',
-                judge: 'thinkingmachines/inkling:free',
-                rationale: 'Razonamiento colosal multimodal (~1.5 Trillones de parámetros combinados): Inkling 975B MoE + Nemotron 3 Ultra 550B + Qwen 3.8.',
-                fallback_trigger: 'Si la cuenta OpenRouter requiere configuración de privacidad/harness, cae fluidamente a V2 Plata.',
-                key_metrics: { reasoningScore: 98, estimatedLatencyMs: 480 },
+                label: 'Oro (Cohere North Mini Code / Qwen 3.8 / Gemini 2.5 Flash)',
+                draft_a: 'cohere/north-mini-code:free',
+                draft_b: 'qwen/qwen3.8-27b',
+                draft_c: 'gemini-2.5-flash',
+                judge: 'cohere/north-mini-code:free',
+                rationale: 'Privacidad estricta y zero entreno: Cohere North Mini Code (Apache 2.0) + Groq Qwen 3.8 + Google Gemini Flash.',
+                fallback_trigger: 'Si Cohere entra en cooldown, pasar a V2 Plata.',
+                key_metrics: { reasoningScore: 94, estimatedLatencyMs: 220 },
             },
             v2_silver: {
                 versionId: 'v2_silver',
-                label: 'Plata (Cohere North Mini Code / Qwen 3.8 / Laguna XS 2.1)',
-                draft_a: 'cohere/north-mini-code:free',
-                draft_b: 'qwen/qwen3.8-27b',
-                draft_c: 'poolside/laguna-xs-2.1:free',
-                judge: 'cohere/north-mini-code:free',
-                rationale: 'SWE-bench y programación agentica con modelos MoE especializados de alta respuesta (Cohere North Mini Code + Qwen 3.8 + Poolside Laguna XS).',
-                fallback_trigger: 'Si Poolside o Cohere están en cooldown, pasar a V3 Bronce.',
-                key_metrics: { reasoningScore: 94, estimatedLatencyMs: 220 },
+                label: 'Plata (Google Gemma 4 31B / Codestral / Qwen 3.8)',
+                draft_a: 'google/gemma-4-31b-it:free',
+                draft_b: 'codestral-latest',
+                draft_c: 'qwen/qwen3.8-27b',
+                judge: 'gemini-2.5-flash',
+                rationale: 'Modelos de pesos abiertos auditados para código y análisis de datos seguros.',
+                fallback_trigger: 'Si Mistral agota cuota dev, pasar a V3 Bronce.',
+                key_metrics: { reasoningScore: 90, estimatedLatencyMs: 240 },
             },
             v3_bronze: {
                 versionId: 'v3_bronze',
                 label: 'Bronce (OpenRouter Free Router / Gemma 4 / Gemini 2.5 Flash)',
                 draft_a: 'openrouter/free',
-                draft_b: 'google/gemma-4-31b-it:free',
+                draft_b: 'google/gemma-4-26b-a4b-it:free',
                 draft_c: 'gemini-2.5-flash',
                 judge: 'gemini-2.5-flash',
-                rationale: 'Máxima resiliencia y balanceo dinámico con openrouter/free, Google Gemma 4 31B y Gemini 2.5 Flash.',
-                fallback_trigger: 'Fallback universal de máxima disponibilidad garantizada.',
-                key_metrics: { reasoningScore: 89, estimatedLatencyMs: 160 },
+                rationale: 'Resiliencia universal con meta-router y Google Gemini.',
+                fallback_trigger: 'Fallback universal garantizado.',
+                key_metrics: { reasoningScore: 88, estimatedLatencyMs: 160 },
             },
         },
         speed: {
             v1_gold: {
                 versionId: 'v1_gold',
-                label: 'Oro (Gemma 4 MoE / Groq Qwen 3.8 / Gemini 2.5 Flash)',
+                label: 'Oro (Gemma 4 MoE / Groq Qwen 3.8 / Gemini Flash Lite)',
                 draft_a: 'google/gemma-4-26b-a4b-it:free',
                 draft_b: 'qwen/qwen3.8-27b',
-                draft_c: 'gemini-2.5-flash',
-                judge: 'gemini-2.5-flash',
-                rationale: 'Arquitectura MoE ligera (3.8B activos en Gemma 4) combinada con aceleración Groq LPU y Gemini Flash.',
-                fallback_trigger: 'Si Google o Groq se saturan, pasar a V2 Plata.',
+                draft_c: 'gemini-flash-lite-latest',
+                judge: 'gemini-flash-lite-latest',
+                rationale: 'Ultra velocidad segura (<100ms) sin concesiones de privacidad.',
+                fallback_trigger: 'Si Groq se satura, pasar a V2 Plata.',
                 key_metrics: { estimatedLatencyMs: 85 },
             },
             v2_silver: {
                 versionId: 'v2_silver',
-                label: 'Plata (Cohere North Mini / Liquid LFM / Gemini Flash Lite)',
+                label: 'Plata (Cohere North Mini / Liquid LFM / Gemini 2.5 Flash)',
                 draft_a: 'cohere/north-mini-code:free',
                 draft_b: 'liquid/lfm-2.5-2.6b:free',
-                draft_c: 'gemini-flash-lite-latest',
-                judge: 'cohere/north-mini-code:free',
-                rationale: 'Modelos compactos de 2B-3B activos para respuesta instantánea (<120ms).',
-                fallback_trigger: 'Si Liquid LFM agota endpoints, pasar a V3 Bronce.',
-                key_metrics: { estimatedLatencyMs: 115 },
+                draft_c: 'gemini-2.5-flash',
+                judge: 'gemini-2.5-flash',
+                rationale: 'Modelos compactos de alta frecuencia de peticiones.',
+                fallback_trigger: 'Garantía de baja latencia.',
+                key_metrics: { estimatedLatencyMs: 120 },
             },
             v3_bronze: {
                 versionId: 'v3_bronze',
@@ -145,25 +152,25 @@ const BASE_2026_BENCHMARK_MATRIX: { free_tier: TierRecommendations; paid_tier: T
         frontier: {
             v1_gold: {
                 versionId: 'v1_gold',
-                label: 'Oro (Gemini 2.5 Pro / Thinking Machines Inkling / Nemotron 3 Ultra)',
+                label: 'Oro (Gemini 2.5 Pro / Gemma 4 31B / Qwen 3.8)',
                 draft_a: 'gemini-2.5-pro',
-                draft_b: 'thinkingmachines/inkling:free',
-                draft_c: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+                draft_b: 'google/gemma-4-31b-it:free',
+                draft_c: 'qwen/qwen3.8-27b',
                 judge: 'gemini-2.5-pro',
-                rationale: 'La cima de la capacidad cognitiva abierta: Gemini 2.5 Pro (Google AI Studio) + Inkling 975B + Nemotron 3 Ultra 550B.',
-                fallback_trigger: 'Si Gemini 2.5 Pro alcanza su límite diario (50 RPD) o Inkling está restringido, caer a V2 Plata.',
-                key_metrics: { artificialAnalysisScore: 97, estimatedLatencyMs: 520 },
+                rationale: 'Máxima frontera sin entrenamiento en datos: Google Gemini 2.5 Pro (50 RPD) + Gemma 4 31B + Groq Qwen 3.8.',
+                fallback_trigger: 'Si Gemini Pro agota 50 RPD, pasar a V2 Plata.',
+                key_metrics: { artificialAnalysisScore: 93, estimatedLatencyMs: 440 },
             },
             v2_silver: {
                 versionId: 'v2_silver',
-                label: 'Plata (Gemma 4 31B / Nemotron 3 Super / Cohere North Mini)',
-                draft_a: 'google/gemma-4-31b-it:free',
-                draft_b: 'nvidia/nemotron-3-super-120b-a12b:free',
-                draft_c: 'cohere/north-mini-code:free',
-                judge: 'google/gemma-4-31b-it:free',
-                rationale: 'Frontier mix de alta capacidad con Google DeepMind Gemma 4 31B, Nemotron 3 Super y Cohere North Mini Code.',
-                fallback_trigger: 'Si Gemma 4 sufre rate limit, pasar a V3 Bronce.',
-                key_metrics: { artificialAnalysisScore: 92, estimatedLatencyMs: 310 },
+                label: 'Plata (Cohere North Mini / Gemma 4 / Gemini 2.5 Flash)',
+                draft_a: 'cohere/north-mini-code:free',
+                draft_b: 'google/gemma-4-26b-a4b-it:free',
+                draft_c: 'gemini-2.5-flash',
+                judge: 'google/gemma-4-26b-a4b-it:free',
+                rationale: 'Consenso equilibrado con modelos de licencia abierta.',
+                fallback_trigger: 'Garantía de disponibilidad.',
+                key_metrics: { artificialAnalysisScore: 90, estimatedLatencyMs: 250 },
             },
             v3_bronze: {
                 versionId: 'v3_bronze',
@@ -172,9 +179,116 @@ const BASE_2026_BENCHMARK_MATRIX: { free_tier: TierRecommendations; paid_tier: T
                 draft_b: 'gemini-2.5-flash',
                 draft_c: 'qwen/qwen3.8-27b',
                 judge: 'gemini-2.5-flash',
-                rationale: 'Consenso de frontera resiliente combinando el meta-router openrouter/free con Gemini 2.5 Flash y Qwen 3.8.',
+                rationale: 'Consenso de frontera resiliente sin requisitos de privacidad adicionales.',
                 fallback_trigger: 'Fallback universal estable.',
                 key_metrics: { artificialAnalysisScore: 89, estimatedLatencyMs: 210 },
+            },
+        },
+    },
+    free_training_tier: {
+        reasoning: {
+            v1_gold: {
+                versionId: 'v1_gold',
+                label: 'Oro (Thinking Machines Inkling / Nemotron 3 Ultra / Laguna XS)',
+                draft_a: 'thinkingmachines/inkling:free',
+                draft_b: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+                draft_c: 'poolside/laguna-xs-2.1:free',
+                judge: 'thinkingmachines/inkling:free',
+                rationale: 'Monstruos de cómputo (~1.5 Trillones de parámetros combinados): Inkling 975B MoE + Nemotron 3 Ultra 550B + Laguna XS 2.1 (Requiere opt-in de entreno).',
+                fallback_trigger: 'Si OpenRouter satura endpoints, caer a V2 Plata.',
+                key_metrics: { reasoningScore: 99, estimatedLatencyMs: 460 },
+            },
+            v2_silver: {
+                versionId: 'v2_silver',
+                label: 'Plata (Nemotron 3 Super / Laguna XS 2.1 / Nemotron Nano Omni)',
+                draft_a: 'nvidia/nemotron-3-super-120b-a12b:free',
+                draft_b: 'poolside/laguna-xs-2.1:free',
+                draft_c: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+                judge: 'nvidia/nemotron-3-super-120b-a12b:free',
+                rationale: 'Especializada en SWE-bench y tareas agenticas de alto nivel con modelos MoE permisivos con entrenamiento.',
+                fallback_trigger: 'Si Poolside o NVIDIA están en cooldown, pasar a V3 Bronce.',
+                key_metrics: { reasoningScore: 95, estimatedLatencyMs: 310 },
+            },
+            v3_bronze: {
+                versionId: 'v3_bronze',
+                label: 'Bronce (Cohere North Mini / Qwen 3.8 / Gemma 4)',
+                draft_a: 'cohere/north-mini-code:free',
+                draft_b: 'qwen/qwen3.8-27b:free',
+                draft_c: 'google/gemma-4-31b-it:free',
+                judge: 'cohere/north-mini-code:free',
+                rationale: 'Fallback ultra resiliente sin interrupción.',
+                fallback_trigger: 'Fallback universal garantizado.',
+                key_metrics: { reasoningScore: 91, estimatedLatencyMs: 190 },
+            },
+        },
+        speed: {
+            v1_gold: {
+                versionId: 'v1_gold',
+                label: 'Oro (Nemotron 3.5 Lightning / Laguna S / Gemma 4 MoE)',
+                draft_a: 'nvidia/nemotron-3.5-lightning:free',
+                draft_b: 'poolside/laguna-s-2.1:free',
+                draft_c: 'google/gemma-4-26b-a4b-it:free',
+                judge: 'google/gemma-4-26b-a4b-it:free',
+                rationale: 'Inferencia ultra rápida con arquitecturas híbridas Mamba/Transformer y MoE compacto.',
+                fallback_trigger: 'Si Lightning se satura, pasar a V2 Plata.',
+                key_metrics: { estimatedLatencyMs: 80 },
+            },
+            v2_silver: {
+                versionId: 'v2_silver',
+                label: 'Plata (Laguna XS 2.1 / Nemotron Nano Omni / Liquid LFM)',
+                draft_a: 'poolside/laguna-xs-2.1:free',
+                draft_b: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+                draft_c: 'liquid/lfm-2.5-2.6b:free',
+                judge: 'poolside/laguna-xs-2.1:free',
+                rationale: 'Excelente velocidad para tareas agenticas continuas y streaming.',
+                fallback_trigger: 'Garantía de baja latencia.',
+                key_metrics: { estimatedLatencyMs: 110 },
+            },
+            v3_bronze: {
+                versionId: 'v3_bronze',
+                label: 'Bronce (Cohere North Mini / Qwen 3.8 / Gemini Flash Lite)',
+                draft_a: 'cohere/north-mini-code:free',
+                draft_b: 'qwen/qwen3.8-27b',
+                draft_c: 'gemini-flash-lite-latest',
+                judge: 'qwen/qwen3.8-27b',
+                rationale: 'Fallback ultra rápido con Groq LPU y Gemini Flash Lite.',
+                fallback_trigger: 'Respuesta inmediata garantizada.',
+                key_metrics: { estimatedLatencyMs: 130 },
+            },
+        },
+        frontier: {
+            v1_gold: {
+                versionId: 'v1_gold',
+                label: 'Oro (Thinking Machines Inkling / Nemotron 3 Ultra / Gemini 2.5 Pro)',
+                draft_a: 'thinkingmachines/inkling:free',
+                draft_b: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+                draft_c: 'gemini-2.5-pro',
+                judge: 'thinkingmachines/inkling:free',
+                rationale: 'Frontera abierta sin límites de escala: Inkling 975B MoE + Nemotron 3 Ultra 550B + Gemini 2.5 Pro.',
+                fallback_trigger: 'Si algún endpoint agota cuota, pasar a V2 Plata.',
+                key_metrics: { artificialAnalysisScore: 98, estimatedLatencyMs: 490 },
+            },
+            v2_silver: {
+                versionId: 'v2_silver',
+                label: 'Plata (Nemotron 3 Super / Laguna XS 2.1 / Gemma 4 31B)',
+                draft_a: 'nvidia/nemotron-3-super-120b-a12b:free',
+                draft_b: 'poolside/laguna-xs-2.1:free',
+                draft_c: 'google/gemma-4-31b-it:free',
+                judge: 'nvidia/nemotron-3-super-120b-a12b:free',
+                rationale: 'Consenso multimodal y de código con Nemotron 3 Super y Laguna XS.',
+                fallback_trigger: 'Garantía de rendimiento.',
+                key_metrics: { artificialAnalysisScore: 94, estimatedLatencyMs: 320 },
+            },
+            v3_bronze: {
+                versionId: 'v3_bronze',
+                label: 'Bronce (Cohere North Mini / Gemini 2.5 Flash / OpenRouter Free)',
+                draft_a: 'cohere/north-mini-code:free',
+                draft_b: 'gemini-2.5-flash',
+                draft_c: 'openrouter/free',
+                judge: 'gemini-2.5-flash',
+                rationale: 'Frontier estable con meta-router y Google Gemini.',
+                fallback_trigger: 'Fallback universal.',
+                key_metrics: { artificialAnalysisScore: 90, estimatedLatencyMs: 180 },
             },
         },
     },
@@ -401,20 +515,22 @@ export async function adviseFusionPresets(forceRefresh = false): Promise<Advisor
     const liveOrFreeModels = await fetchOpenRouterFreeCatalog();
 
     // 3. Deep-clone the base benchmark matrix to enrich with user's slot bindings
-    const recommendations: { free_tier: TierRecommendations; paid_tier: TierRecommendations } = JSON.parse(
-        JSON.stringify(BASE_2026_BENCHMARK_MATRIX)
-    );
+    const recommendations: {
+        free_tier: TierRecommendations;
+        free_training_tier: TierRecommendations;
+        paid_tier: TierRecommendations;
+    } = JSON.parse(JSON.stringify(BASE_2026_BENCHMARK_MATRIX));
 
     // If live OpenRouter has top-ranked free models, inject them into V1 of free tier
     if (liveOrFreeModels.includes('nvidia/nemotron-3-ultra-550b-a55b:free')) {
-        recommendations.free_tier.frontier.v1_gold.draft_b = 'nvidia/nemotron-3-ultra-550b-a55b:free';
+        recommendations.free_training_tier.frontier.v1_gold.draft_b = 'nvidia/nemotron-3-ultra-550b-a55b:free';
     }
     if (liveOrFreeModels.includes('nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free')) {
-        recommendations.free_tier.reasoning.v1_gold.draft_a = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
+        recommendations.free_training_tier.reasoning.v2_silver.draft_c = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
     }
 
     // 4. Bind slots to user's real projects/keys for all versions
-    const tiers: Array<'free_tier' | 'paid_tier'> = ['free_tier', 'paid_tier'];
+    const tiers: Array<'free_tier' | 'free_training_tier' | 'paid_tier'> = ['free_tier', 'free_training_tier', 'paid_tier'];
     const modes: Array<'reasoning' | 'speed' | 'frontier'> = ['reasoning', 'speed', 'frontier'];
     const versions: Array<'v1_gold' | 'v2_silver' | 'v3_bronze'> = ['v1_gold', 'v2_silver', 'v3_bronze'];
 
@@ -442,6 +558,7 @@ export async function adviseFusionPresets(forceRefresh = false): Promise<Advisor
         verified_at: '2026-09',
         source: 'live_benchmark_matrix',
         free_tier: recommendations.free_tier,
+        free_training_tier: recommendations.free_training_tier,
         paid_tier: recommendations.paid_tier,
         userEcosystem: {
             totalKeys: upstreamKeys.length,
@@ -463,7 +580,7 @@ export async function adviseFusionPresets(forceRefresh = false): Promise<Advisor
  * If V1 fails, automatically tries V2, then V3.
  */
 export async function validateAndSelectActivePreset(
-    tier: 'free' | 'paid',
+    tier: 'free' | 'free_training' | 'paid',
     mode: 'reasoning' | 'speed' | 'frontier',
     preferredVersion?: 'v1_gold' | 'v2_silver' | 'v3_bronze',
     autoFallback = true
@@ -474,7 +591,9 @@ export async function validateAndSelectActivePreset(
     errorReason?: string;
 }> {
     const advisor = await adviseFusionPresets();
-    const tierGroup = tier === 'paid' ? advisor.paid_tier : advisor.free_tier;
+    const tierGroup = tier === 'paid'
+        ? advisor.paid_tier
+        : (tier === 'free_training' ? advisor.free_training_tier : advisor.free_tier);
     const modeGroup = tierGroup[mode];
 
     const versionOrder: Array<'v1_gold' | 'v2_silver' | 'v3_bronze'> = preferredVersion
