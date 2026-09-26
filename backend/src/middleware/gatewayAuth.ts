@@ -57,20 +57,45 @@ export const gatewayAuth = async (c: Context, next: Next) => {
             .single();
 
         if (error || !data) {
-            if (isAnthropicReq) {
-                return c.json({
-                    type: "error",
-                    error: {
-                        type: "authentication_error",
-                        message: "Invalid API key"
-                    }
-                }, 401);
-            }
-            return c.json({ error: { message: "Invalid API Key", type: "authentication_error" } }, 401);
-        }
+            // Smart Fallback: Check if the token is directly a registered upstream provider key (e.g. nvapi-..., gsk_..., etc.)
+            const { data: upKey } = await supabase
+                .from('upstream_keys')
+                .select('id, project_id, provider, api_key')
+                .eq('api_key', token)
+                .limit(1)
+                .maybeSingle();
 
-        keyData = data;
-        keyCache.set(token, { data, expiresAt: Date.now() + KEY_CACHE_TTL_MS });
+            if (upKey) {
+                // Fetch models linked to this upstream key
+                const { data: gkm } = await supabase
+                    .from('gateway_key_models')
+                    .select('upstream_key_id, model_name, upstream_model_name')
+                    .eq('upstream_key_id', upKey.id);
+
+                keyData = {
+                    id: 'direct_' + upKey.id,
+                    project_id: upKey.project_id,
+                    key_name: `Direct Upstream (${upKey.provider})`,
+                    api_key: upKey.api_key,
+                    gateway_key_models: gkm || []
+                };
+                keyCache.set(token, { data: keyData, expiresAt: Date.now() + KEY_CACHE_TTL_MS });
+            } else {
+                if (isAnthropicReq) {
+                    return c.json({
+                        type: "error",
+                        error: {
+                            type: "authentication_error",
+                            message: "Invalid API key"
+                        }
+                    }, 401);
+                }
+                return c.json({ error: { message: "Invalid API Key", type: "authentication_error" } }, 401);
+            }
+        } else {
+            keyData = data;
+            keyCache.set(token, { data, expiresAt: Date.now() + KEY_CACHE_TTL_MS });
+        }
     }
 
     // Bind the key data to context for the handler
