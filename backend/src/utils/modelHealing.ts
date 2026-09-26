@@ -11,7 +11,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { supabase } from '../db';
-import { runKeyPing, getProviderEndpoint } from '../routes/channelTesting';
 import { recordLatency } from './latencyGuard';
 import { callPuterAI, PUTER_MODELS } from './puterClient';
 import { invalidateGatewayKeyCache } from '../middleware/gatewayAuth';
@@ -337,9 +336,16 @@ export async function repairProjectChannels(projectId: string): Promise<{
         });
     });
 
-    // 3. Ping each active upstream key concurrently
+    // 3. Ping each active upstream key concurrently with its configured models
     const activeKeys = (upstreamKeys || []).filter((k: any) => k.is_active !== false);
-    const pingPromises = activeKeys.map((key: any) => runKeyPing(key));
+    const pingPromises = activeKeys.map((key: any) => {
+        const modelsForThisKey = (gatewayKeys || []).flatMap((gk: any) =>
+            (gk.gateway_key_models || [])
+                .filter((m: any) => m.upstream_key_id === key.id)
+                .map((m: any) => m.model_name)
+        );
+        return runKeyPing(key, modelsForThisKey);
+    });
     const pingResults = await Promise.allSettled(pingPromises);
 
     const channelHealth: any[] = [];
@@ -423,6 +429,62 @@ export async function repairProjectChannels(projectId: string): Promise<{
         channelHealth,
         remediationActions: remediations,
     };
+}
+
+export interface TestResult {
+    upstreamKeyId: string;
+    provider: string;
+    ok: boolean;
+    latencyMs: number;
+    statusCode: number;
+    error?: string;
+    modelTested: string;
+}
+
+export const DEFAULT_TEST_MODELS: Record<string, string> = {
+    google: 'gemini-2.5-flash',
+    vertex: 'gemini-2.5-flash',
+    groq: 'qwen/qwen3.8-27b',
+    cerebras: 'llama3.1-8b',
+    openai: 'gpt-4o-mini',
+    openrouter: 'z-ai/glm-5.3-flash',
+    mistral: 'codestral-latest',
+    deepseek: 'deepseek-chat',
+    puter: 'gpt-4o-mini',
+    nvidia: 'meta/llama-3.3-70b-instruct',
+    minimax: 'abab6.5s-chat',
+    moonshot: 'moonshot-v1-8k',
+    mimo: 'mimo-v2.6-flash',
+    kie: 'gemini-3-flash',
+    ollama: 'qwen2.5-coder:latest',
+    lmstudio: 'local-model',
+    vllm: 'default',
+    local: 'default',
+};
+
+export function getProviderEndpoint(provider: string, model: string, baseUrl?: string | null): string {
+    if (baseUrl && baseUrl.trim()) {
+        const clean = baseUrl.trim().replace(/\/+$/, '');
+        if (clean.endsWith('/chat/completions')) return clean;
+        if (clean.endsWith('/v1')) return `${clean}/chat/completions`;
+        return `${clean}/v1/chat/completions`;
+    }
+    if (provider === 'openai') return 'https://api.openai.com/v1/chat/completions';
+    if (provider === 'groq') return 'https://api.groq.com/openai/v1/chat/completions';
+    if (provider === 'openrouter') return 'https://openrouter.ai/api/v1/chat/completions';
+    if (provider === 'cerebras') return 'https://api.cerebras.ai/v1/chat/completions';
+    if (provider === 'google' || provider === 'vertex') return 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+    if (provider === 'mistral') return 'https://api.mistral.ai/v1/chat/completions';
+    if (provider === 'nvidia') return 'https://integrate.api.nvidia.com/v1/chat/completions';
+    if (provider === 'deepseek') return 'https://api.deepseek.com/chat/completions';
+    if (provider === 'moonshot') return 'https://api.moonshot.cn/v1/chat/completions';
+    if (provider === 'minimax') return 'https://api.minimax.chat/v1/chat/completions';
+    if (provider === 'mimo') return 'https://api.xiaomimimo.com/v1/chat/completions';
+    if (provider === 'kie') return `https://api.kie.ai/${encodeURIComponent(model)}/v1/chat/completions`;
+    if (provider === 'ollama') return 'http://localhost:11434/v1/chat/completions';
+    if (provider === 'lmstudio') return 'http://localhost:1234/v1/chat/completions';
+    if (provider === 'vllm' || provider === 'local') return 'http://localhost:8000/v1/chat/completions';
+    return '';
 }
 
 export interface ProbeModelResult {
@@ -569,6 +631,97 @@ export async function probeModelForKey(key: any, model: string): Promise<ProbeMo
             errorCategory: 'network_or_timeout',
         };
     }
+}
+
+/**
+ * Pings an upstream key using live 1-token probe logic.
+ * Checks project-configured models first, heals deprecated models,
+ * and falls back to candidate models without blindly testing broken defaults.
+ */
+export async function runKeyPing(key: any, candidateModels?: string[]): Promise<TestResult> {
+    const provider = key.provider?.toLowerCase() || '';
+
+    // 1. Gather models to test
+    let modelsToTry: string[] = [];
+    if (candidateModels && candidateModels.length > 0) {
+        modelsToTry = [...candidateModels];
+    } else {
+        // Query models configured for this upstream key in the database
+        try {
+            const { data: gkm } = await supabase
+                .from('gateway_key_models')
+                .select('model_name')
+                .eq('upstream_key_id', key.id);
+            if (gkm && gkm.length > 0) {
+                modelsToTry = gkm.map((m: any) => m.model_name).filter(Boolean);
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    // 2. Heal any deprecated models in the candidates list
+    const healedCandidates: string[] = [];
+    for (const m of modelsToTry) {
+        const migration = KNOWN_MODEL_MIGRATIONS[m.toLowerCase()] || KNOWN_MODEL_MIGRATIONS[m];
+        if (migration?.replacement) {
+            healedCandidates.push(migration.replacement);
+        } else {
+            healedCandidates.push(m);
+        }
+    }
+
+    // 3. Fallback to curated default for this provider if empty
+    if (healedCandidates.length === 0) {
+        const fallback = DEFAULT_TEST_MODELS[provider] || 'gpt-4o-mini';
+        healedCandidates.push(fallback);
+    }
+
+    // Deduplicate while preserving order
+    const uniqueModels = Array.from(new Set(healedCandidates));
+
+    let lastResult: ProbeModelResult | null = null;
+    let testedModelName = uniqueModels[0] || 'default';
+
+    // 4. Test up to 3 candidate models until one succeeds
+    for (let i = 0; i < Math.min(uniqueModels.length, 3); i++) {
+        const m = uniqueModels[i];
+        testedModelName = m;
+        const probeRes = await probeModelForKey(key, m);
+        lastResult = probeRes;
+
+        if (probeRes.ok) {
+            return {
+                upstreamKeyId: key.id,
+                provider: key.provider,
+                ok: true,
+                latencyMs: probeRes.latencyMs,
+                statusCode: probeRes.statusCode || 200,
+                modelTested: m,
+            };
+        }
+
+        // If the error was because the model is deprecated/not found or payment required,
+        // try the next candidate model so a valid key isn't falsely marked dead!
+        if (probeRes.errorCategory === 'deprecated_or_not_found' || probeRes.errorCategory === 'paid_or_exhausted') {
+            continue;
+        }
+
+        // Hard auth errors (401/403) mean the key itself is invalid; stop testing
+        if (probeRes.statusCode === 401 || probeRes.statusCode === 403) {
+            break;
+        }
+    }
+
+    return {
+        upstreamKeyId: key.id,
+        provider: key.provider,
+        ok: false,
+        latencyMs: lastResult?.latencyMs || 0,
+        statusCode: lastResult?.statusCode || 500,
+        error: lastResult?.error || 'All candidate models failed',
+        modelTested: testedModelName,
+    };
 }
 
 /**

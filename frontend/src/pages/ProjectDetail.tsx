@@ -417,7 +417,7 @@ export default function ProjectDetail() {
                 ...prev,
                 [keyId]: {
                     success: res.ok,
-                    msg: res.ok ? `⚡ ${res.latencyMs}ms` : `❌ ${res.error || 'Failed'}`,
+                    msg: res.ok ? `⚡ ${res.latencyMs}ms (${res.modelTested})` : `❌ ${res.error || 'Failed'} (${res.modelTested || 'err'})`,
                     testing: false,
                 }
             }));
@@ -441,7 +441,7 @@ export default function ProjectDetail() {
                 data.results.forEach((r: any) => {
                     map[r.upstreamKeyId] = {
                         success: r.ok,
-                        msg: r.ok ? `⚡ ${r.latencyMs}ms` : `❌ ${r.error || 'Failed'}`,
+                        msg: r.ok ? `⚡ ${r.latencyMs}ms (${r.modelTested})` : `❌ ${r.error || 'Failed'} (${r.modelTested || 'err'})`,
                         testing: false,
                     };
                 });
