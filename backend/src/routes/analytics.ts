@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
+import * as fs from 'fs';
+import * as path from 'path';
 import { supabase } from '../db';
 import { authMiddleware } from '../middleware/auth';
-import { getCacheStats } from '../utils/semanticCache';
+import { getCacheStats, resetCacheStats } from '../utils/semanticCache';
 
 const analytics = new Hono();
 
@@ -9,6 +11,40 @@ analytics.use('*', authMiddleware);
 
 analytics.get('/cache-stats', (c) => {
     return c.json(getCacheStats());
+});
+
+analytics.post('/reset', async (c) => {
+    try {
+        // Reset all request logs in Supabase
+        const { error } = await supabase.from('request_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        
+        // Also clear local SQLite request_logs if present
+        try {
+            const { DatabaseSync } = require('node:sqlite');
+            const candidatePaths = [
+                path.resolve(process.cwd(), 'data', 'tiermax.db'),
+                path.resolve(process.cwd(), 'backend', 'data', 'tiermax.db'),
+                path.resolve(__dirname, '..', '..', 'data', 'tiermax.db'),
+                path.resolve(__dirname, '..', 'data', 'tiermax.db'),
+            ];
+            for (const dbPath of candidatePaths) {
+                if (fs.existsSync(dbPath)) {
+                    try {
+                        const localDb = new DatabaseSync(dbPath);
+                        localDb.exec('DELETE FROM request_logs;');
+                    } catch { }
+                }
+            }
+        } catch { }
+
+        // Reset persistent semantic cache statistics and in-memory entries
+        resetCacheStats();
+
+        if (error) return c.json({ error: error.message }, 500);
+        return c.json({ success: true, message: 'Analytics and cache metrics reset to 0 successfully' });
+    } catch (err: any) {
+        return c.json({ error: err.message }, 500);
+    }
 });
 
 analytics.get('/:projectId', async (c) => {
@@ -83,7 +119,8 @@ analytics.get('/:projectId', async (c) => {
         totalPromptTokens += log.prompt_tokens || 0;
         totalCompletionTokens += log.completion_tokens || 0;
         const logCostUsd = Number(log.total_cost_usd || 0);
-        const billingType = log.upstream_key_id ? billingTypeByKeyId.get(log.upstream_key_id) || 'paid' : 'paid';
+        const isCache = log.provider === 'cache';
+        const billingType = isCache ? 'free' : (log.upstream_key_id ? billingTypeByKeyId.get(log.upstream_key_id) || 'paid' : 'paid');
         if (billingType === 'free') {
             savedCostUsd += logCostUsd;
             freeTokens += log.total_tokens || 0;

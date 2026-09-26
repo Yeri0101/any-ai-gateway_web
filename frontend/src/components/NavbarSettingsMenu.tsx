@@ -84,9 +84,9 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                     fontSize: '0.75rem',
                     fontWeight: 600,
                     borderRadius: 'var(--radius-pill)',
-                    background: isOpen ? 'rgba(255, 107, 43, 0.12)' : 'var(--surface-card)',
-                    border: `1px solid ${isOpen ? 'var(--brand-orange)' : 'var(--border-subtle)'}`,
-                    color: isOpen ? 'var(--brand-orange)' : 'var(--text-primary)',
+                    background: isOpen ? 'rgba(99, 102, 241, 0.12)' : 'var(--surface-card)',
+                    border: `1px solid ${isOpen ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
+                    color: isOpen ? 'var(--accent-primary)' : 'var(--text-primary)',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
                 }}
@@ -94,7 +94,7 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                 <Settings 
                     size={14} 
                     style={{ 
-                        color: isOpen ? 'var(--brand-orange)' : 'var(--text-secondary)', 
+                        color: isOpen ? 'var(--accent-primary)' : 'var(--text-secondary)', 
                         transform: isOpen ? 'rotate(45deg)' : 'none', 
                         transition: 'transform 0.25s ease, color 0.2s' 
                     }} 
@@ -385,7 +385,7 @@ export const NavbarSettingsMenu: React.FC<NavbarSettingsMenuProps> = ({
                             onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-hover)'}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >
-                            <KeyRound size={13} style={{ color: 'var(--brand-orange)' }} />
+                            <KeyRound size={13} style={{ color: 'var(--accent-primary)' }} />
                             <span>{t('nav.change_password') || 'Cambiar Contraseña'}</span>
                         </button>
 

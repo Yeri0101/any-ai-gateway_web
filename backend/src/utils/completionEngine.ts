@@ -2,7 +2,7 @@ import { stream } from 'hono/streaming';
 import { supabase } from '../db';
 import { providerStates, updateProviderCalls, markProviderError, checkAndRecoverProvider } from './limitTracker';
 import { callPuterAI, callPuterAIStream } from './puterClient';
-import { buildCacheKey, getCached, setCached, setCachedStream } from './semanticCache';
+import { buildCacheKey, getCached, setCached, setCachedStream, estimateStreamUsage, recordTokensSaved } from './semanticCache';
 import { pruneContext } from './contextPruner';
 import { isProviderSlow, recordLatency, markProviderSlow, LATENCY_ABORT_TIMEOUT_MS } from './latencyGuard';
 import { classifyRequest, filterCandidatesByTier, estimateTokenCount } from './smartRouter';
@@ -551,6 +551,7 @@ async function executeHighCapacityFailover({
  * fallback retry loop, prompt restructuring, latency guard, and provider normalizations.
  */
 export async function executeCompletionEngine(options: CompletionEngineOptions): Promise<any> {
+    const startTime = Date.now();
     const { body, gatewayKey, c, returnRawStream = false, isInternalCall = false } = options;
     const allowedModels = gatewayKey.gateway_key_models || [];
     let requestedModel: string = body.model || '';
@@ -794,11 +795,46 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     if (cacheKey) {
         const cached = getCached(cacheKey);
         if (cached) {
+            const cacheHitLatencyMs = Math.max(1, Date.now() - startTime);
             const ts = new Date().toISOString();
-            console.log(`[${ts}] [SemanticCache] HIT for model=${requestedModel} key=${cacheKey.substring(0, 12)}…`);
-            if (c && !isInternalCall && !returnRawStream) {
+            console.log(`[${ts}] [SemanticCache] HIT for model=${requestedModel} key=${cacheKey.substring(0, 12)}… (${cacheHitLatencyMs}ms)`);
+
+            const promptTok = cached.usage?.prompt_tokens ?? estimateTokenCount(body.messages || [], body.tools || []);
+            const compTok = cached.usage?.completion_tokens ?? 0;
+            const totalTok = cached.usage?.total_tokens ?? (promptTok + compTok);
+
+            if (!cached.usage?.total_tokens && totalTok > 0) {
+                cached.usage = { prompt_tokens: promptTok, completion_tokens: compTok, total_tokens: totalTok };
+                recordTokensSaved(totalTok);
+            }
+
+            // Insert cache hit log into telemetry
+            insertRequestLog({
+                project_id: gatewayKey.project_id,
+                gateway_key_id: gatewayKey.id,
+                upstream_key_id: null,
+                provider: 'cache',
+                model: requestedModel,
+                status_code: 200,
+                latency_ms: cacheHitLatencyMs,
+                total_tokens: totalTok,
+                prompt_tokens: promptTok,
+                completion_tokens: compTok,
+                total_cost_usd: 0,
+                input_cost_usd: 0,
+                output_cost_usd: 0,
+            }).catch((err) => {
+                console.error('[SemanticCache] Failed to log cache hit:', err);
+            });
+
+            if (c) {
                 c.header('X-Cache', 'HIT');
-                if (body.stream && cached.isStream && cached.chunks) {
+                c.header('X-Cache-Lookup', 'HIT');
+                c.header('X-Router-Tier', 'cache');
+            }
+
+            if (c && !isInternalCall && !returnRawStream) {
+                if (body.stream && cached.chunks && cached.chunks.length > 0) {
                     c.header('Content-Type', 'text/event-stream; charset=utf-8');
                     c.header('Cache-Control', 'no-cache, no-transform');
                     c.header('Connection', 'keep-alive');
@@ -811,6 +847,29 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 }
                 return c.json(cached.value, 200);
             }
+
+            if (returnRawStream && cached.chunks && cached.chunks.length > 0) {
+                const readable = new ReadableStream({
+                    start(controller) {
+                        for (const chunk of cached.chunks!) {
+                            controller.enqueue(new TextEncoder().encode(chunk));
+                        }
+                        controller.close();
+                    }
+                });
+                const mockResponse = new Response(readable, {
+                    status: 200,
+                    headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'X-Cache': 'HIT' }
+                });
+                return {
+                    ok: true,
+                    rawResponse: mockResponse,
+                    status: 200,
+                    provider: 'cache',
+                    isCacheHit: true,
+                };
+            }
+
             return { ok: true, data: cached.value || cached, status: 200, isCacheHit: true };
         }
     }
@@ -877,7 +936,6 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         return { ok: false, status: 403, error: errObj.error };
     }
 
-    const startTime = Date.now();
     let finalResponse: any = null;
     let finalStatus = 500;
     let finalTokens = 0;
@@ -1326,6 +1384,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 }
 
                 if (c) {
+                    c.header('X-Cache', 'MISS');
                     c.header('Content-Type', 'text/event-stream; charset=utf-8');
                     c.header('Cache-Control', 'no-cache, no-transform');
                     c.header('Connection', 'keep-alive');
@@ -1355,7 +1414,8 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                                 }
                             }
                             if (cacheKey && chunksToCache.length > 0) {
-                                setCachedStream(cacheKey, chunksToCache);
+                                const streamUsage = estimateStreamUsage(chunksToCache, estimatedPromptTokens);
+                                setCachedStream(cacheKey, chunksToCache, streamUsage);
                             }
                         } catch (err: any) {
                             try {
@@ -1384,7 +1444,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             };
 
             if (cacheKey) {
-                setCached(cacheKey, data);
+                setCached(cacheKey, data, usage);
             }
 
             finalResponse = data;

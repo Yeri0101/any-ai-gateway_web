@@ -292,7 +292,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           }}>
             <div className="flex items-center justify-between" style={{ marginBottom: '1.5rem' }}>
               <div className="flex items-center gap-2">
-                <KeyRound size={17} style={{ color: 'var(--brand-orange)' }} />
+                <KeyRound size={17} style={{ color: 'var(--accent-primary)' }} />
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>{t('settings.password_title')}</h3>
               </div>
               <button onClick={() => setShowPasswordModal(false)} className="btn btn-secondary btn-icon" aria-label="Close modal">✕</button>

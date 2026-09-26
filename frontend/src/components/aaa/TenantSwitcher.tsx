@@ -126,8 +126,8 @@ export const TenantSwitcher: React.FC = () => {
                                     padding: '0.45rem 0.6rem',
                                     borderRadius: '6px',
                                     border: 'none',
-                                    background: t.id === activeTenant.id ? 'rgba(255, 107, 43, 0.12)' : 'transparent',
-                                    color: t.id === activeTenant.id ? 'var(--brand-orange)' : 'var(--text-primary)',
+                                    background: t.id === activeTenant.id ? 'rgba(99, 102, 241, 0.12)' : 'transparent',
+                                    color: t.id === activeTenant.id ? 'var(--accent-primary)' : 'var(--text-primary)',
                                     fontSize: '0.78rem',
                                     fontWeight: t.id === activeTenant.id ? 700 : 500,
                                     cursor: 'pointer',
@@ -145,7 +145,7 @@ export const TenantSwitcher: React.FC = () => {
                                     <Building2 size={13} style={{ opacity: 0.8 }} />
                                     {t.name}
                                 </span>
-                                {t.id === activeTenant.id && <Check size={13} style={{ color: 'var(--brand-orange)' }} />}
+                                {t.id === activeTenant.id && <Check size={13} style={{ color: 'var(--accent-primary)' }} />}
                             </button>
                         ))}
                     </div>

@@ -1032,7 +1032,7 @@ export default function ProjectDetail() {
         </div>
     );
 
-    const projColor = project.color || '#ff6b2b';
+    const projColor = project.color || '#6366f1';
     const paidProviderCount = providers.filter(p => (p.billing_type || 'paid') === 'paid').length;
     const freeProviderCount = providers.filter(p => p.billing_type === 'free').length;
     const billingSummary =
@@ -1055,7 +1055,7 @@ export default function ProjectDetail() {
                 <span style={{ opacity: 0.5 }}>/</span>
                 <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{project.name}</span>
                 <span style={{ opacity: 0.5 }}>/</span>
-                <span style={{ color: 'var(--brand-orange)', fontWeight: 600, textTransform: 'capitalize' }}>{activeTab}</span>
+                <span style={{ color: 'var(--accent-primary)', fontWeight: 600, textTransform: 'capitalize' }}>{activeTab}</span>
             </div>
 
             {/* Project Header */}
@@ -1080,14 +1080,14 @@ export default function ProjectDetail() {
                         title="Click to view all Gateway Operating Modes (SOAT, Guardian, Dual Engine, Atlas)"
                         style={{
                             display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
-                            background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.3)',
+                            background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)',
                             borderRadius: 'var(--radius-pill)', padding: '0.28rem 0.65rem',
                             fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em',
-                            color: 'var(--brand-orange)', textTransform: 'uppercase', cursor: 'pointer',
+                            color: 'var(--accent-primary)', textTransform: 'uppercase', cursor: 'pointer',
                             transition: 'all var(--transition-fast)',
                         }}
                     >
-                        <PromptAnchorGlyph size={12} color="var(--brand-orange)" /> {t('modes.badge_soat')}
+                        <PromptAnchorGlyph size={12} color="var(--accent-primary)" /> {t('modes.badge_soat')}
                     </button>
                     <button
                         onClick={() => setModesModalOpen(true)}
@@ -1343,7 +1343,7 @@ export default function ProjectDetail() {
                                                                             <span>{health.requestsPerDay || 0} req/d</span>
                                                                             <button
                                                                                 onClick={() => openRateLimitModal(p)}
-                                                                                style={{ background: 'none', border: 'none', color: 'var(--brand-orange)', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontSize: '0.68rem', fontWeight: 600 }}
+                                                                                style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontSize: '0.68rem', fontWeight: 600 }}
                                                                             >
                                                                                 Limits ✎
                                                                             </button>
@@ -1508,7 +1508,7 @@ export default function ProjectDetail() {
                                             padding: '1.25rem', background: 'var(--bg-secondary)', position: 'relative', overflow: 'hidden',
                                             transition: 'border-color 0.2s',
                                         }}
-                                            onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(255,107,43,0.2)')}
+                                            onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.35)')}
                                             onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-default)')}
                                         >
                                             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'var(--accent-gradient)', opacity: 0.5 }} />
@@ -1518,9 +1518,9 @@ export default function ProjectDetail() {
                                                 <div className="flex items-center gap-2">
                                                     <div style={{
                                                         width: 28, height: 28, borderRadius: 'var(--radius-sm)',
-                                                        background: 'rgba(255,107,43,0.1)', border: '1px solid rgba(255,107,43,0.25)',
+                                                        background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.25)',
                                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        fontSize: '0.65rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--brand-orange)',
+                                                        fontSize: '0.65rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--accent-primary)',
                                                     }}>
                                                         {index + 1}
                                                     </div>
@@ -1571,7 +1571,7 @@ export default function ProjectDetail() {
                                                         onClick={handleAutoDiscover}
                                                         disabled={discovering}
                                                         className="btn btn-secondary btn-sm"
-                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderColor: 'var(--brand-orange)', color: 'var(--brand-orange)', fontSize: '0.72rem', padding: '0.2rem 0.6rem' }}
+                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)', fontSize: '0.72rem', padding: '0.2rem 0.6rem' }}
                                                         title="Sondea y auto-agrega los modelos activos de las llaves del proyecto"
                                                     >
                                                         <Zap size={11} className={discovering ? 'spin' : ''} />
@@ -1614,7 +1614,7 @@ export default function ProjectDetail() {
                                                                             type="button"
                                                                             onClick={() => handleAddCustomModelToGateway(g.id)}
                                                                             className="btn btn-secondary btn-sm"
-                                                                            style={{ fontSize: '0.75rem', borderColor: 'var(--brand-orange)', color: 'var(--brand-orange)' }}
+                                                                            style={{ fontSize: '0.75rem', borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)' }}
                                                                         >
                                                                             ➕ Agregar "{addModelSearch[g.id]?.trim()}" manualmente
                                                                         </button>
@@ -1625,7 +1625,7 @@ export default function ProjectDetail() {
                                                                         <select multiple
                                                                             value={gatewayKeyBulkModels[g.id] || []}
                                                                             onChange={e => setGatewayKeyBulkModels(prev => ({ ...prev, [g.id]: Array.from(e.target.selectedOptions, o => o.value) }))}
-                                                                            style={{ flex: 1, height: 110, padding: '0.4rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--brand-orange)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
+                                                                            style={{ flex: 1, height: 110, padding: '0.4rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
                                                                         >
                                                                             {Array.from(new Set(availableModels.flatMap(am => am.models?.map((m: any) => m.id || m) || []))).sort()
                                                                                 .filter(mid => !g.gateway_key_models?.some(gm => gm.model_name === mid))
@@ -1934,7 +1934,7 @@ export default function ProjectDetail() {
                                             <li key={prov} style={{ marginBottom: '0.875rem' }}>
                                                 <div className="flex justify-between items-center" style={{ marginBottom: '0.3rem' }}>
                                                     <ProviderChip provider={prov} />
-                                                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--brand-orange)', fontWeight: 600 }}>
+                                                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--accent-primary)', fontWeight: 600 }}>
                                                         {count} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>reqs</span>
                                                     </span>
                                                 </div>
@@ -1962,7 +1962,7 @@ export default function ProjectDetail() {
                                                     </span>
                                                 </div>
                                                 <div className="progress-bar">
-                                                    <div className="progress-fill" style={{ width: `${pct}%`, background: 'linear-gradient(90deg, var(--brand-amber), var(--brand-orange))' }} />
+                                                    <div className="progress-fill" style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #6366f1, #06b6d4)' }} />
                                                 </div>
                                             </li>
                                         );
@@ -2045,7 +2045,7 @@ export default function ProjectDetail() {
                     <div className="flex justify-between items-center" style={{ marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                         <div>
                             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                                <DualEngineGlyph size={18} color="var(--brand-orange)" />
+                                <DualEngineGlyph size={18} color="var(--accent-primary)" />
                                 {t('healing.title')}
                             </h2>
                             <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
@@ -2100,7 +2100,7 @@ export default function ProjectDetail() {
                                 </div>
                                 <div className="stat-card">
                                     <div className="stat-label"><Zap size={10} /> Auto-Remediations</div>
-                                    <div className="stat-value orange">{autoHealedCount}</div>
+                                    <div className="stat-value" style={{ color: 'var(--accent-primary)' }}>{autoHealedCount}</div>
                                 </div>
                             </div>
                         );
@@ -2108,10 +2108,10 @@ export default function ProjectDetail() {
 
                     {/* Discovery & Model Sync Report (if auto-discovery run) */}
                     {discoveryReport && (
-                        <div className="glass-panel" style={{ marginBottom: '1.5rem', border: '1px solid rgba(255,107,43,0.35)' }}>
+                        <div className="glass-panel" style={{ marginBottom: '1.5rem', border: '1px solid rgba(99, 102, 241, 0.35)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                                 <div className="section-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <Zap size={14} color="var(--brand-orange)" />
+                                    <Zap size={14} color="var(--accent-primary)" />
                                     {t('healing.modal_title')}
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -2155,7 +2155,7 @@ export default function ProjectDetail() {
                             {/* Healed Migrations Cards */}
                             {discoveryReport.healedMigrations && discoveryReport.healedMigrations.length > 0 && (
                                 <div style={{ marginBottom: '1.25rem' }}>
-                                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--brand-orange)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>
+                                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--brand-amber)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>
                                         🔄 {t('healing.healed_models')}
                                     </div>
                                     <div style={{ display: 'grid', gap: '0.5rem' }}>
@@ -2348,7 +2348,7 @@ export default function ProjectDetail() {
                     {/* Timeline of Events */}
                     <div className="glass-panel">
                         <div className="section-label" style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <History size={12} color="var(--brand-orange)" />
+                            <History size={12} color="var(--accent-primary)" />
                             {t('healing.timeline_title')}
                             {projectHistory.length > 0 && (
                                 <span className="badge badge-paused" style={{ marginLeft: 'auto', fontSize: '0.72rem' }}>
@@ -2402,7 +2402,7 @@ export default function ProjectDetail() {
                                                             <span style={{ color: 'var(--text-muted)', textDecoration: isAutoHealed ? 'line-through' : 'none' }}>
                                                                 {item.originalModel}
                                                             </span>
-                                                            <ArrowRight size={12} style={{ color: 'var(--brand-orange)' }} />
+                                                            <ArrowRight size={12} style={{ color: 'var(--accent-primary)' }} />
                                                             <span style={{ color: '#10b981', fontWeight: 600 }}>
                                                                 {item.resolvedModel}
                                                             </span>
@@ -2549,28 +2549,28 @@ export default function ProjectDetail() {
                 }} onClick={() => setRateLimitModal(null)}>
                     <div style={{
                         background: 'var(--bg-secondary)',
-                        border: '1px solid rgba(255,107,43,0.35)',
+                        border: '1px solid rgba(99, 102, 241, 0.35)',
                         borderRadius: 'var(--radius-xl)',
                         padding: '2rem',
                         width: '100%', maxWidth: 440,
-                        boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,107,43,0.2)',
+                        boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(99, 102, 241, 0.2)',
                         position: 'relative',
                     }} onClick={e => e.stopPropagation()}>
                         {/* Header */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
                             <div style={{
                                 width: 40, height: 40, borderRadius: 'var(--radius-md)',
-                                background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.3)',
+                                background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>
-                                <Shield size={18} style={{ color: 'var(--brand-orange)' }} />
+                                <Shield size={18} style={{ color: 'var(--accent-primary)' }} />
                             </div>
                             <div>
                                 <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                                     {t('project.limits_modal_title')}
                                 </h3>
                                 <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                                    Provider: <strong style={{ textTransform: 'capitalize', color: 'var(--brand-orange)' }}>{rateLimitModal.providerName}</strong> ({rateLimitModal.billingType})
+                                    Provider: <strong style={{ textTransform: 'capitalize', color: 'var(--accent-primary)' }}>{rateLimitModal.providerName}</strong> ({rateLimitModal.billingType})
                                 </p>
                             </div>
                         </div>
@@ -2693,7 +2693,7 @@ export default function ProjectDetail() {
                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                             <div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                                    <Shield size={18} style={{ color: 'var(--brand-orange)' }} />
+                                    <Shield size={18} style={{ color: 'var(--accent-primary)' }} />
                                     <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                                         {t('modes.modal_title')}
                                     </h3>

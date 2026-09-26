@@ -131,7 +131,7 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: 'var(--brand-orange)'
+                            color: 'var(--accent-primary)'
                         }}>
                             <Server size={22} />
                         </div>
@@ -335,7 +335,7 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '0.3rem',
                                             padding: '0.3rem 0.6rem', borderRadius: '5px',
-                                            border: 'none', background: copiedKey === 'quickstart' ? 'var(--status-healthy)' : 'var(--brand-orange)',
+                                            border: 'none', background: copiedKey === 'quickstart' ? 'var(--status-healthy)' : 'var(--accent-primary)',
                                             color: '#ffffff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
                                         }}
                                     >
@@ -370,7 +370,7 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '0.3rem',
                                             padding: '0.3rem 0.6rem', borderRadius: '5px',
-                                            border: 'none', background: copiedKey === 'npm' ? 'var(--status-healthy)' : 'var(--brand-orange)',
+                                            border: 'none', background: copiedKey === 'npm' ? 'var(--status-healthy)' : 'var(--accent-primary)',
                                             color: '#ffffff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
                                         }}
                                     >
@@ -405,7 +405,7 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '0.3rem',
                                             padding: '0.3rem 0.6rem', borderRadius: '5px',
-                                            border: 'none', background: copiedKey === 'pm2' ? 'var(--status-healthy)' : 'var(--brand-orange)',
+                                            border: 'none', background: copiedKey === 'pm2' ? 'var(--status-healthy)' : 'var(--accent-primary)',
                                             color: '#ffffff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
                                         }}
                                     >
@@ -440,7 +440,7 @@ export const WelcomeServerModal: React.FC<WelcomeServerModalProps> = ({ isOpen, 
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '0.3rem',
                                             padding: '0.3rem 0.6rem', borderRadius: '5px',
-                                            border: 'none', background: copiedKey === 'docker' ? 'var(--status-healthy)' : 'var(--brand-orange)',
+                                            border: 'none', background: copiedKey === 'docker' ? 'var(--status-healthy)' : 'var(--accent-primary)',
                                             color: '#ffffff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
                                         }}
                                     >

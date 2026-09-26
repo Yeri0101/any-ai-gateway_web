@@ -152,7 +152,7 @@ export default function AuditLogs() {
                 return { bg: 'rgba(239, 68, 68, 0.15)', border: 'var(--status-error)', text: 'var(--status-error)' };
             case 'ALERT':
             case 'WARNING':
-                return { bg: 'rgba(255, 107, 43, 0.15)', border: 'var(--brand-orange)', text: 'var(--brand-orange)' };
+                return { bg: 'rgba(245, 158, 11, 0.15)', border: 'var(--brand-amber)', text: 'var(--brand-amber)' };
             default:
                 return { bg: 'var(--surface-2)', border: 'var(--border-subtle)', text: 'var(--text-secondary)' };
         }
@@ -169,7 +169,7 @@ export default function AuditLogs() {
                             background: 'var(--surface-2)',
                             border: '1px solid var(--border-subtle)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: 'var(--brand-orange)'
+                            color: 'var(--accent-primary)'
                         }}>
                             <ShieldCheck size={20} />
                         </div>
@@ -269,9 +269,9 @@ export default function AuditLogs() {
                             style={{
                                 padding: '0.25rem 0.6rem',
                                 borderRadius: '6px',
-                                border: `1px solid ${severityFilter === sev ? 'var(--brand-orange)' : 'var(--border-subtle)'}`,
-                                background: severityFilter === sev ? 'rgba(255, 107, 43, 0.15)' : 'transparent',
-                                color: severityFilter === sev ? 'var(--brand-orange)' : 'var(--text-muted)',
+                                border: `1px solid ${severityFilter === sev ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
+                                background: severityFilter === sev ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+                                color: severityFilter === sev ? 'var(--accent-primary)' : 'var(--text-muted)',
                                 fontSize: '0.72rem',
                                 fontWeight: 700,
                                 cursor: 'pointer',

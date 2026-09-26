@@ -287,7 +287,7 @@ export default function Playground() {
             <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
                     <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                        <CyberTerminalGlyph size={26} color="var(--brand-orange)" />
+                        <CyberTerminalGlyph size={26} color="var(--accent-primary)" />
                         {t('playground.title')}
                     </h1>
                     <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
@@ -310,7 +310,7 @@ export default function Playground() {
                 <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     <div className="flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem' }}>
                         <div className="flex items-center gap-2" style={{ fontWeight: 700, fontSize: '0.95rem' }}>
-                            <RouterCascadeGlyph size={17} color="var(--brand-orange)" />
+                            <RouterCascadeGlyph size={17} color="var(--accent-primary)" />
                             <span>{t('playground.req_params')}</span>
                         </div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>POST /v1/chat/completions</span>
@@ -337,7 +337,7 @@ export default function Playground() {
                                 {selectedProject && (
                                     <Link
                                         to={`/project/${selectedProject}`}
-                                        style={{ fontSize: '0.7rem', color: 'var(--brand-orange)', textDecoration: 'none' }}
+                                        style={{ fontSize: '0.7rem', color: 'var(--accent-primary)', textDecoration: 'none' }}
                                     >
                                         + {t('project.tab_gateway')}
                                     </Link>
@@ -433,7 +433,7 @@ export default function Playground() {
                                 step="0.05"
                                 value={temperature}
                                 onChange={e => setTemperature(parseFloat(e.target.value))}
-                                style={{ width: '100%', accentColor: 'var(--brand-orange)' }}
+                                style={{ width: '100%', accentColor: 'var(--accent-primary)' }}
                             />
                         </div>
 
@@ -449,7 +449,7 @@ export default function Playground() {
                                 step="100"
                                 value={maxTokens}
                                 onChange={e => setMaxTokens(parseInt(e.target.value, 10))}
-                                style={{ width: '100%', accentColor: 'var(--brand-orange)' }}
+                                style={{ width: '100%', accentColor: 'var(--accent-primary)' }}
                             />
                         </div>
 
@@ -460,7 +460,7 @@ export default function Playground() {
                                     type="checkbox"
                                     checked={stream}
                                     onChange={e => setStream(e.target.checked)}
-                                    style={{ accentColor: 'var(--brand-orange)', width: 16, height: 16 }}
+                                    style={{ accentColor: 'var(--accent-primary)', width: 16, height: 16 }}
                                 />
                                 <span>{t('playground.sse_typewriter')}</span>
                             </label>
@@ -617,7 +617,7 @@ export default function Playground() {
                                 <Terminal size={14} />
                                 <span>{t('playground.output_console')}</span>
                                 {loading && (
-                                    <span style={{ fontSize: '0.72rem', color: 'var(--brand-orange)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                                         <span className="spinner-ring" style={{ width: 10, height: 10, borderWidth: 1.5 }} /> Streaming…
                                     </span>
                                 )}
@@ -642,7 +642,7 @@ export default function Playground() {
                         }}>
                             {responseContent || (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 220, gap: '0.75rem', opacity: 0.6 }}>
-                                    <CyberTerminalGlyph size={36} color="var(--brand-orange)" />
+                                    <CyberTerminalGlyph size={36} color="var(--accent-primary)" />
                                     <span>{t('playground.output_placeholder')}</span>
                                 </div>
                             )}

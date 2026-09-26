@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../api';
-import { FolderOpen, Plus, Trash2, Edit2, Zap, Palette, Key, Activity, Copy, Check, DollarSign, CheckCircle2, XCircle } from 'lucide-react';
+import { FolderOpen, Plus, Trash2, Edit2, Zap, Palette, Key, Activity, Copy, Check, DollarSign, CheckCircle2, XCircle, RotateCcw } from 'lucide-react';
 import { TierMaxLogo, AnthropicIcon, RouterCascadeGlyph, DualEngineGlyph } from '../components/Icons';
 import { useLanguage } from '../i18n';
 import { useToast } from '../ToastContext';
@@ -38,14 +38,14 @@ type UsageMetrics = {
 };
 
 const PROJECT_COLORS = [
-    '#ff6b2b', // orange (default)
-    '#ffaa00', // amber
-    '#22c55e', // green
+    '#6366f1', // indigo (default)
+    '#06b6d4', // cyan
+    '#10b981', // emerald
     '#14b8a6', // teal
     '#3b82f6', // blue
     '#8b5cf6', // purple
     '#ec4899', // pink
-    '#ef4444', // red
+    '#f59e0b', // amber
 ];
 
 export default function Dashboard() {
@@ -121,6 +121,26 @@ export default function Dashboard() {
         }
     };
 
+    const [resettingMetrics, setResettingMetrics] = useState(false);
+    const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+    const handleResetMetrics = async () => {
+        setResettingMetrics(true);
+        try {
+            await fetchApi('/analytics/reset', { method: 'POST' });
+            setUsageMetrics({ totalTokens: 0, actualCostUsd: 0, estimatedSavingsUsd: 0 });
+            setRecentCalls([]);
+            setCacheStats({ size: 0, totalHits: 0, totalMisses: 0, hitRate: 0, estimatedTokensSaved: 0 });
+            await loadOverview(false);
+            toast.success(t('dashboard.reset_success') || 'Métricas de consumo y caché reiniciadas a 0 con éxito.');
+            setShowResetConfirm(false);
+        } catch (err: any) {
+            toast.error(err?.message || 'Error al reiniciar las métricas');
+        } finally {
+            setResettingMetrics(false);
+        }
+    };
+
     const loadOverview = async (silent = false) => {
         try {
             if (!silent) setLoading(true);
@@ -140,6 +160,7 @@ export default function Dashboard() {
                     });
                 }
                 if (overview.usageMetrics) setUsageMetrics(overview.usageMetrics);
+                if (overview.cacheStats) setCacheStats(overview.cacheStats);
             }
         } catch (err) {
             console.error('Failed to load dashboard overview, falling back to legacy load:', err);
@@ -374,10 +395,10 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2" style={{ marginBottom: '0.35rem' }}>
                         <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
-                            background: 'rgba(255,107,43,0.1)', border: '1px solid rgba(255,107,43,0.25)',
+                            background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.25)',
                             borderRadius: 'var(--radius-pill)', padding: '0.2rem 0.65rem',
                             fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em',
-                            color: 'var(--brand-orange)', textTransform: 'uppercase',
+                            color: 'var(--accent-primary)', textTransform: 'uppercase',
                         }}>
                             <Zap size={9} /> SOAT Gateway
                         </span>
@@ -387,43 +408,65 @@ export default function Dashboard() {
                     </h1>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.2rem' }}>{t('dashboard.subtitle')}</p>
 
-                    <div className="usage-summary-card">
-                        <div className="usage-summary-metric">
-                            <div className="usage-summary-icon">
-                                <Activity size={15} />
-                            </div>
-                            <div>
-                                <div className="usage-summary-label">{t('dashboard.usage.tokens_spent')}</div>
-                                <div className="usage-summary-value">{formatCompactNumber(usageMetrics.totalTokens)}</div>
-                                <div className="usage-summary-detail">{usageMetrics.totalTokens.toLocaleString()} {t('dashboard.usage.total_tokens')}</div>
-                            </div>
-                        </div>
-                        <div className="usage-summary-divider" />
-                        <div className="usage-summary-metric">
-                            <div className="usage-summary-icon savings">
-                                <DollarSign size={15} />
-                            </div>
-                            <div>
-                                <div className="usage-summary-label">{t('dashboard.usage.money_saved')}</div>
-                                <div className="usage-summary-value green">{formatCurrency(usageMetrics.estimatedSavingsUsd)}</div>
-                                <div className="usage-summary-detail">{t('dashboard.usage.actual_cost')}: {formatCurrency(usageMetrics.actualCostUsd)}</div>
-                            </div>
-                        </div>
-                        <div className="usage-summary-divider" />
-                        <div className="usage-summary-metric">
-                            <div className="usage-summary-icon" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}>
-                                <Zap size={15} />
-                            </div>
-                            <div>
-                                <div className="usage-summary-label">{t('dashboard.cache_stats')}</div>
-                                <div className="usage-summary-value" style={{ color: 'var(--text-primary)' }}>
-                                    {cacheStats ? `${Math.round((cacheStats.hitRate || 0) * 100)}%` : '98%'}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                        <div className="usage-summary-card" style={{ marginTop: 0 }}>
+                            <div className="usage-summary-metric">
+                                <div className="usage-summary-icon">
+                                    <Activity size={15} />
                                 </div>
-                                <div className="usage-summary-detail">
-                                    {cacheStats ? `${formatCompactNumber(cacheStats.estimatedTokensSaved || 0)} tokens` : 'Instant <5ms'}
+                                <div>
+                                    <div className="usage-summary-label">{t('dashboard.usage.tokens_spent')}</div>
+                                    <div className="usage-summary-value">{formatCompactNumber(usageMetrics.totalTokens)}</div>
+                                    <div className="usage-summary-detail">{usageMetrics.totalTokens.toLocaleString()} {t('dashboard.usage.total_tokens')}</div>
                                 </div>
                             </div>
+                            <div className="usage-summary-divider" />
+                            <div className="usage-summary-metric">
+                                <div className="usage-summary-icon savings">
+                                    <DollarSign size={15} />
+                                </div>
+                                <div>
+                                    <div className="usage-summary-label">{t('dashboard.usage.money_saved')}</div>
+                                    <div className="usage-summary-value green">{formatCurrency(usageMetrics.estimatedSavingsUsd)}</div>
+                                    <div className="usage-summary-detail">{t('dashboard.usage.actual_cost')}: {formatCurrency(usageMetrics.actualCostUsd)}</div>
+                                </div>
+                            </div>
+                            <div className="usage-summary-divider" />
+                            <div className="usage-summary-metric">
+                                <div className="usage-summary-icon" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}>
+                                    <Zap size={15} />
+                                </div>
+                                <div>
+                                    <div className="usage-summary-label">{t('dashboard.cache_stats')}</div>
+                                    <div className="usage-summary-value" style={{ color: 'var(--text-primary)' }}>
+                                        {cacheStats ? `${Math.round((cacheStats.hitRate || 0) * 100)}%` : '98%'}
+                                    </div>
+                                    <div className="usage-summary-detail">
+                                        {cacheStats ? `${formatCompactNumber(cacheStats.estimatedTokensSaved || 0)} tokens` : 'Instant <5ms'}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+
+                        <button
+                            type="button"
+                            onClick={() => setShowResetConfirm(true)}
+                            className="btn btn-secondary btn-sm"
+                            style={{
+                                padding: '0.45rem 0.75rem',
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                gap: '0.35rem',
+                                color: 'var(--text-muted)',
+                                borderColor: 'var(--border-subtle)',
+                                borderRadius: 'var(--radius-md)',
+                                height: 'fit-content'
+                            }}
+                            title={t('dashboard.reset_stats_tooltip') || 'Reiniciar métricas y contadores de telemetría a 0'}
+                        >
+                            <RotateCcw size={13} />
+                            <span>{t('dashboard.reset_stats') || 'Reset Stats'}</span>
+                        </button>
                     </div>
                 </div>
 
@@ -546,7 +589,7 @@ export default function Dashboard() {
             {/* Create Project */}
             <div className="glass-panel" style={{ marginBottom: '2rem' }}>
                 <div className="flex items-center gap-2" style={{ marginBottom: '0.875rem' }}>
-                    <Plus size={16} style={{ color: 'var(--brand-orange)' }} />
+                    <Plus size={16} style={{ color: 'var(--accent-primary)' }} />
                     <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>{t('dashboard.create_title')}</h3>
                 </div>
                 <form onSubmit={handleCreate} className="flex gap-3 items-center">
@@ -705,8 +748,8 @@ export default function Dashboard() {
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '0.45rem',
-                        borderColor: 'var(--brand-orange)',
-                        color: 'var(--brand-orange)',
+                        borderColor: 'var(--accent-primary)',
+                        color: 'var(--accent-primary)',
                         fontSize: '0.78rem',
                         fontWeight: 700,
                         padding: '0.35rem 0.85rem'
@@ -720,10 +763,10 @@ export default function Dashboard() {
 
             {/* Global Heal Report Card */}
             {healAllReport && (
-                <div className="glass-panel" style={{ marginBottom: '1.5rem', border: '1px solid rgba(255,107,43,0.35)' }}>
+                <div className="glass-panel" style={{ marginBottom: '1.5rem', border: '1px solid rgba(99,102,241,0.35)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '0.92rem', color: 'var(--text-primary)' }}>
-                            <Zap size={14} color="var(--brand-orange)" />
+                            <Zap size={14} color="var(--accent-primary)" />
                             {t('healing.modal_title')} — Todos los Proyectos
                         </div>
                         <button
@@ -799,7 +842,7 @@ export default function Dashboard() {
                     </div>
                 ) : (
                     projects.map(p => {
-                        const projColor = p.color || '#ff6b2b';
+                        const projColor = p.color || '#6366f1';
                         return (
                             <Link
                                 to={`/projects/${p.id}`}
@@ -975,6 +1018,117 @@ export default function Dashboard() {
                 onClose={() => setIsInspectorOpen(false)}
                 recentRequest={recentCalls[0]}
             />
+
+            {/* Reset Stats Confirmation Modal */}
+            {showResetConfirm && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 10000,
+                        backgroundColor: 'rgba(5, 7, 15, 0.82)',
+                        backdropFilter: 'blur(16px)',
+                        WebkitBackdropFilter: 'blur(16px)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '1.25rem',
+                        animation: 'fadeIn 0.2s ease-out'
+                    }}
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget && !resettingMetrics) setShowResetConfirm(false);
+                    }}
+                >
+                    <div style={{
+                        background: 'var(--surface-card)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: '16px',
+                        width: '100%',
+                        maxWidth: '480px',
+                        padding: '1.75rem',
+                        boxShadow: 'var(--shadow-lg), 0 0 40px rgba(0, 0, 0, 0.5)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '1.25rem'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <div style={{
+                                width: '42px',
+                                height: '42px',
+                                borderRadius: '10px',
+                                background: 'rgba(245, 158, 11, 0.12)',
+                                border: '1px solid rgba(245, 158, 11, 0.25)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'var(--brand-amber)',
+                                flexShrink: 0
+                            }}>
+                                <RotateCcw size={20} />
+                            </div>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                    {t('dashboard.reset_stats_title') || 'Reiniciar Estadísticas'}
+                                </h3>
+                                <p style={{ margin: '0.2rem 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                                    OpenClaw Gateway Telemetry & Cache
+                                </p>
+                            </div>
+                        </div>
+
+                        <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                            {t('dashboard.reset_stats_desc') || '¿Estás seguro de que deseas reiniciar todos los contadores de consumo, historial de telemetría y estadísticas de caché? Esta acción no se puede deshacer.'}
+                        </p>
+
+                        <div style={{
+                            padding: '0.75rem 1rem',
+                            borderRadius: '8px',
+                            background: 'rgba(245, 158, 11, 0.08)',
+                            border: '1px solid rgba(245, 158, 11, 0.2)',
+                            fontSize: '0.8rem',
+                            color: 'var(--brand-amber)',
+                            display: 'flex',
+                            gap: '0.5rem',
+                            alignItems: 'center'
+                        }}>
+                            <span>⚠️</span>
+                            <span>Se restablecerán a 0 los tokens, costo acumulado, peticiones recientes y tasa de aciertos de caché.</span>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setShowResetConfirm(false)}
+                                disabled={resettingMetrics}
+                            >
+                                {t('common.cancel') || 'Cancelar'}
+                            </button>
+                            <button
+                                type="button"
+                                className="btn"
+                                style={{
+                                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                    color: '#ffffff',
+                                    border: 'none',
+                                    fontWeight: 600,
+                                    boxShadow: '0 4px 14px rgba(239, 68, 68, 0.35)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem'
+                                }}
+                                onClick={handleResetMetrics}
+                                disabled={resettingMetrics}
+                            >
+                                <RotateCcw size={14} className={resettingMetrics ? 'spin' : ''} />
+                                {resettingMetrics ? (t('dashboard.resetting') || 'Reiniciando...') : (t('dashboard.confirm_reset') || 'Confirmar Reinicio')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

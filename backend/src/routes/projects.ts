@@ -5,6 +5,7 @@ import { authMiddleware } from '../middleware/auth';
 import { pauseProvider } from '../utils/limitTracker';
 import { getProjectHistory, repairProjectChannels, autoDiscoverAndSyncProjectModels, autoDiscoverAndSyncAllProjects } from '../utils/modelHealing';
 import { dashboardEvents } from '../utils/dashboardEvents';
+import { getCacheStats } from '../utils/semanticCache';
 
 const projects = new Hono();
 
@@ -20,7 +21,7 @@ projects.get('/dashboard-overview', async (c) => {
                 .order('created_at', { ascending: false }),
             supabase
                 .from('request_logs')
-                .select('project_id, gateway_key_id, upstream_key_id, model, latency_ms, total_tokens, total_cost_usd, created_at')
+                .select('project_id, gateway_key_id, upstream_key_id, provider, model, latency_ms, total_tokens, total_cost_usd, created_at')
                 .order('created_at', { ascending: false })
                 .limit(2000),
             supabase
@@ -50,7 +51,8 @@ projects.get('/dashboard-overview', async (c) => {
         for (const log of logs) {
             totalTokens += (log.total_tokens || 0);
             const cost = Number(log.total_cost_usd || 0);
-            const bType = log.upstream_key_id ? billingTypeMap.get(log.upstream_key_id) || 'paid' : 'paid';
+            const isCache = log.provider === 'cache';
+            const bType = isCache ? 'free' : (log.upstream_key_id ? billingTypeMap.get(log.upstream_key_id) || 'paid' : 'paid');
             if (bType === 'free') {
                 estimatedSavingsUsd += cost;
             } else {
@@ -85,12 +87,15 @@ projects.get('/dashboard-overview', async (c) => {
                     project_id: projId,
                     project_name: projId ? (projectNameMap.get(projId) || 'Proyecto') : 'Proyecto',
                     model: log.model || '—',
+                    provider: log.provider || null,
                     latency_ms: log.latency_ms ?? null,
                     total_tokens: log.total_tokens ?? 0,
                     created_at: log.created_at,
                 };
             })
             .slice(0, 3);
+
+        const cacheStats = getCacheStats();
 
         return c.json({
             projects: sanitizedProjects,
@@ -100,6 +105,7 @@ projects.get('/dashboard-overview', async (c) => {
                 actualCostUsd: Number(actualCostUsd.toFixed(6)),
                 estimatedSavingsUsd: Number(estimatedSavingsUsd.toFixed(6)),
             },
+            cacheStats,
         });
     } catch (err: any) {
         return c.json({ error: err.message || 'Failed to fetch dashboard overview' }, 500);
@@ -151,7 +157,7 @@ projects.get('/realtime-stream', async (c) => {
 projects.get('/recent-calls', async (c) => {
     const { data: recentLogs, error: logsError } = await supabase
         .from('request_logs')
-        .select('project_id, gateway_key_id, model, latency_ms, total_tokens, created_at')
+        .select('project_id, gateway_key_id, provider, model, latency_ms, total_tokens, created_at')
         .order('created_at', { ascending: false })
         .limit(12);
 
@@ -193,6 +199,7 @@ projects.get('/recent-calls', async (c) => {
                 project_id: resolvedProjectId,
                 project_name: resolvedProjectId ? (projectNameById.get(resolvedProjectId) || 'Proyecto desconocido') : 'Proyecto desconocido',
                 model: log.model || 'Modelo desconocido',
+                provider: log.provider || null,
                 latency_ms: log.latency_ms ?? null,
                 total_tokens: log.total_tokens ?? 0,
                 created_at: log.created_at,

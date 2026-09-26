@@ -22,13 +22,13 @@ export const TierMaxLogo: React.FC<IconProps> = ({ size = 20, className = '', ..
     >
         <defs>
             <linearGradient id="tm-grad-1" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#ff7b39" />
-                <stop offset="50%" stopColor="#ff5500" />
-                <stop offset="100%" stopColor="#c2410c" />
+                <stop offset="0%" stopColor="#818cf8" />
+                <stop offset="50%" stopColor="#6366f1" />
+                <stop offset="100%" stopColor="#4338ca" />
             </linearGradient>
             <linearGradient id="tm-core" x1="10" y1="10" x2="22" y2="22" gradientUnits="userSpaceOnUse">
                 <stop offset="0%" stopColor="#ffffff" />
-                <stop offset="100%" stopColor="#ffb38a" />
+                <stop offset="100%" stopColor="#c7d2fe" />
             </linearGradient>
         </defs>
         {/* Outer hexagonal gateway ring */}
@@ -37,7 +37,7 @@ export const TierMaxLogo: React.FC<IconProps> = ({ size = 20, className = '', ..
             stroke="url(#tm-grad-1)"
             strokeWidth="2.2"
             strokeLinejoin="round"
-            fill="rgba(255,107,43,0.06)"
+            fill="rgba(99, 102, 241, 0.08)"
         />
         {/* Converging angular energy teeth / claws */}
         <path
@@ -56,7 +56,7 @@ export const TierMaxLogo: React.FC<IconProps> = ({ size = 20, className = '', ..
         />
         {/* Center Quantum Conduit Core */}
         <circle cx="16" cy="16" r="3" fill="url(#tm-core)" />
-        <circle cx="16" cy="16" r="4.5" stroke="#ff8c42" strokeWidth="0.75" strokeDasharray="2 2" />
+        <circle cx="16" cy="16" r="4.5" stroke="#818cf8" strokeWidth="0.75" strokeDasharray="2 2" />
     </svg>
 );
 

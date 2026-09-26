@@ -69,7 +69,7 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: 'var(--brand-orange)'
+                            color: 'var(--accent-cyan)'
                         }}>
                             <Activity size={20} className="pulse-slow" />
                         </div>
@@ -106,9 +106,9 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
                                 style={{
                                     padding: '0.75rem',
                                     borderRadius: '10px',
-                                    border: activePreset === 'ultraspeed' ? '1px solid var(--brand-orange)' : '1px solid var(--border-subtle)',
-                                    background: activePreset === 'ultraspeed' ? 'rgba(255, 107, 43, 0.12)' : 'var(--surface-2)',
-                                    color: activePreset === 'ultraspeed' ? 'var(--brand-orange)' : 'var(--text-muted)',
+                                    border: activePreset === 'ultraspeed' ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
+                                    background: activePreset === 'ultraspeed' ? 'rgba(6, 182, 212, 0.12)' : 'var(--surface-2)',
+                                    color: activePreset === 'ultraspeed' ? '#06b6d4' : 'var(--text-muted)',
                                     cursor: 'pointer',
                                     textAlign: 'left',
                                     transition: 'all 0.15s ease'
@@ -125,9 +125,9 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
                                 style={{
                                     padding: '0.75rem',
                                     borderRadius: '10px',
-                                    border: activePreset === 'reasoning' ? '1px solid var(--brand-orange)' : '1px solid var(--border-subtle)',
-                                    background: activePreset === 'reasoning' ? 'rgba(255, 107, 43, 0.12)' : 'var(--surface-2)',
-                                    color: activePreset === 'reasoning' ? 'var(--brand-orange)' : 'var(--text-muted)',
+                                    border: activePreset === 'reasoning' ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+                                    background: activePreset === 'reasoning' ? 'rgba(99, 102, 241, 0.12)' : 'var(--surface-2)',
+                                    color: activePreset === 'reasoning' ? 'var(--accent-primary)' : 'var(--text-muted)',
                                     cursor: 'pointer',
                                     textAlign: 'left',
                                     transition: 'all 0.15s ease'
@@ -170,10 +170,10 @@ export const OpenClawLiveInspector: React.FC<OpenClawLiveInspectorProps> = ({ is
                         </div>
 
                         <div style={{ padding: '0.9rem', borderRadius: '12px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--brand-orange)', fontSize: '0.8rem', marginBottom: '0.3rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-cyan)', fontSize: '0.8rem', marginBottom: '0.3rem' }}>
                                 <Clock size={14} /> {t('inspector.latency_ttft')}
                             </div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>58 ms <span style={{ fontSize: '0.75rem', color: 'var(--brand-orange)' }}>(⚡ Ultra-Fast)</span></div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>58 ms <span style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)' }}>(⚡ Ultra-Fast)</span></div>
                         </div>
 
                         <div style={{ padding: '0.9rem', borderRadius: '12px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)' }}>

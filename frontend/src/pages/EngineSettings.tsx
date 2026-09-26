@@ -607,7 +607,7 @@ export default function EngineSettings() {
             <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
                     <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <DualEngineGlyph size={24} color="var(--brand-orange)" />
+                        <DualEngineGlyph size={24} color="var(--accent-primary)" />
                         {t('engine.title')}
                     </h1>
                     <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
@@ -649,10 +649,11 @@ export default function EngineSettings() {
                     <div className="flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem' }}>
                         <div className="flex items-center gap-2">
                             <div style={{
-                                width: 32, height: 32, borderRadius: 8, background: 'rgba(255,107,43,0.15)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand-orange)'
+                                width: 34, height: 34, borderRadius: 10, background: 'var(--surface-2)',
+                                border: '1px solid var(--border-subtle)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)'
                             }}>
-                                <PromptAnchorGlyph size={18} color="var(--brand-orange)" />
+                                <PromptAnchorGlyph size={18} color="var(--text-secondary)" />
                             </div>
                             <div>
                                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>{t('engine.system1_title')}</h3>
@@ -660,13 +661,28 @@ export default function EngineSettings() {
                             </div>
                         </div>
 
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
+                        <label style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            padding: '0.25rem 0.65rem',
+                            borderRadius: '8px',
+                            background: config.enableJevRouting ? 'var(--surface-3)' : 'var(--surface-2)',
+                            border: '1px solid var(--border-subtle)',
+                            transition: 'all 0.2s ease'
+                        }}>
                             <input
                                 type="checkbox"
                                 checked={config.enableJevRouting}
                                 onChange={e => setConfig({ ...config, enableJevRouting: e.target.checked })}
+                                style={{ accentColor: 'var(--accent-primary)', cursor: 'pointer' }}
                             />
-                            <span>{t('engine.enable_toggle')}</span>
+                            <span style={{ color: config.enableJevRouting ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                                {t('engine.enable_toggle')}
+                            </span>
                         </label>
                     </div>
 
@@ -754,8 +770,9 @@ export default function EngineSettings() {
                     <div className="flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem' }}>
                         <div className="flex items-center gap-2">
                             <div style={{
-                                width: 32, height: 32, borderRadius: 8, background: 'rgba(255,107,43,0.15)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand-orange)'
+                                width: 34, height: 34, borderRadius: 10, background: 'var(--surface-2)',
+                                border: '1px solid var(--border-subtle)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)'
                             }}>
                                 <ProviderIcon provider={config.managerProvider} size={18} />
                             </div>
@@ -765,7 +782,15 @@ export default function EngineSettings() {
                             </div>
                         </div>
 
-                        <span className="badge badge-healthy" style={{ fontSize: '0.7rem' }}>
+                        <span style={{
+                            fontSize: '0.72rem',
+                            padding: '0.2rem 0.55rem',
+                            borderRadius: '6px',
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--border-subtle)',
+                            color: 'var(--text-muted)',
+                            fontWeight: 600
+                        }}>
                             Self-Healing
                         </span>
                     </div>
@@ -780,7 +805,7 @@ export default function EngineSettings() {
                             <label style={{ fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span>{t('engine.source_label')}</span>
                                 {config.managerUpstreamKeyId && (
-                                    <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 700 }}>
+                                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>
                                         ✓ {t('engine.key_linked_project')}
                                     </span>
                                 )}
@@ -834,7 +859,7 @@ export default function EngineSettings() {
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
                                 <label style={{ fontSize: '0.78rem', margin: 0 }}>
                                     {t('engine.manager_model')} {apiModels.length > 0 && (
-                                        <span style={{ color: 'var(--brand-orange)', fontWeight: 600 }}>
+                                        <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>
                                             ({apiModels.length} {t('engine.models_available')})
                                         </span>
                                     )}
@@ -844,7 +869,7 @@ export default function EngineSettings() {
                                         type="button"
                                         onClick={() => setIsCustomModel(!isCustomModel)}
                                         style={{
-                                            background: 'none', border: 'none', color: 'var(--brand-orange)',
+                                            background: 'none', border: 'none', color: 'var(--accent-primary)',
                                             fontSize: '0.72rem', cursor: 'pointer', padding: 0, textDecoration: 'underline'
                                         }}
                                     >
@@ -859,7 +884,7 @@ export default function EngineSettings() {
                                     background: 'var(--surface-1)', border: '1px solid var(--border-subtle)', borderRadius: 6,
                                     fontSize: '0.82rem', color: 'var(--text-muted)'
                                 }}>
-                                    <RefreshCw size={14} className="spin" style={{ color: 'var(--brand-orange)' }} />
+                                    <RefreshCw size={14} className="spin" style={{ color: 'var(--accent-primary)' }} />
                                     <span>{t('engine.loading_models')}</span>
                                 </div>
                             ) : apiModels.length > 0 && !isCustomModel ? (
@@ -891,7 +916,7 @@ export default function EngineSettings() {
                         <label style={{ fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span>{t('engine.manager_key')}</span>
                             {config.managerUpstreamKeyId && (
-                                <span style={{ fontSize: '0.7rem', color: '#10b981' }}>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                                     🔒 {t('engine.key_linked_project')}
                                 </span>
                             )}
@@ -942,11 +967,10 @@ export default function EngineSettings() {
                             disabled={calibrating}
                             className="btn btn-secondary"
                             style={{
-                                justifyContent: 'center', gap: '0.4rem', fontSize: '0.82rem',
-                                borderColor: 'rgba(255,107,43,0.3)', color: 'var(--brand-orange)'
+                                justifyContent: 'center', gap: '0.4rem', fontSize: '0.82rem'
                             }}
                         >
-                            {calibrating ? <RefreshCw size={14} className="spin" /> : <RateGuardianGlyph size={14} color="var(--brand-orange)" />}
+                            {calibrating ? <RefreshCw size={14} className="spin" /> : <RateGuardianGlyph size={14} color="var(--text-secondary)" />}
                             <span>Auto-Calibrate Quotas</span>
                         </button>
                     </div>
@@ -973,7 +997,8 @@ export default function EngineSettings() {
                 <div className="flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                     <div className="flex items-center gap-2">
                         <div style={{
-                            width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)',
+                            width: 34, height: 34, borderRadius: 10, background: 'var(--surface-2)',
+                            border: '1px solid var(--border-subtle)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)'
                         }}>
                             <RouterCascadeGlyph size={18} color="var(--text-secondary)" />
@@ -994,9 +1019,7 @@ export default function EngineSettings() {
                                 fontSize: '0.75rem',
                                 padding: '0.35rem 0.85rem',
                                 fontWeight: 700,
-                                gap: '0.4rem',
-                                background: '#8b5cf6',
-                                borderColor: '#7c3aed'
+                                gap: '0.4rem'
                             }}
                             title="Guardar cambios de la terna Fusion y Motores"
                         >
@@ -1051,29 +1074,29 @@ export default function EngineSettings() {
 
                 {/* Frontier Model Intelligence Advisor Card */}
                 <div style={{
-                    background: 'radial-gradient(ellipse at top, rgba(139, 92, 246, 0.08), transparent 70%), var(--surface-1)',
-                    border: '1px solid rgba(139, 92, 246, 0.25)',
-                    borderRadius: 10,
-                    padding: '1.15rem',
+                    background: 'var(--surface-1)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 12,
+                    padding: '1.25rem',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '0.9rem'
+                    gap: '1rem'
                 }}>
                     {/* Advisor Header & Live Sources */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <div className="flex items-center gap-2">
-                            <Sparkles size={16} color="#a855f7" />
-                            <span style={{ fontWeight: 800, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                            <Sparkles size={16} color="var(--accent-primary)" />
+                            <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
                                 {t('engine.fusion_advisor_title') || 'Asesor Inteligente de Modelos Frontera (Benchmarks Vivos 2026)'}
                             </span>
                             <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: '0.66rem', background: 'rgba(168,85,247,0.15)', color: '#c084fc', padding: '0.12rem 0.45rem', borderRadius: 4, fontWeight: 600 }}>
+                                <span style={{ fontSize: '0.66rem', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', padding: '0.12rem 0.45rem', borderRadius: 4, fontWeight: 500 }}>
                                     Artificial Analysis v4.3+
                                 </span>
-                                <span style={{ fontSize: '0.66rem', background: 'rgba(59,130,246,0.15)', color: '#60a5fa', padding: '0.12rem 0.45rem', borderRadius: 4, fontWeight: 600 }}>
+                                <span style={{ fontSize: '0.66rem', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', padding: '0.12rem 0.45rem', borderRadius: 4, fontWeight: 500 }}>
                                     LMSYS Arena 2026
                                 </span>
-                                <span style={{ fontSize: '0.66rem', background: 'rgba(16,185,129,0.15)', color: '#34d399', padding: '0.12rem 0.45rem', borderRadius: 4, fontWeight: 600 }}>
+                                <span style={{ fontSize: '0.66rem', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', padding: '0.12rem 0.45rem', borderRadius: 4, fontWeight: 500 }}>
                                     Live OpenRouter Catalog
                                 </span>
                             </div>
@@ -1110,12 +1133,12 @@ export default function EngineSettings() {
                         alignItems: 'center',
                         flexWrap: 'wrap',
                         gap: '0.75rem',
-                        background: 'rgba(0,0,0,0.15)',
+                        background: 'var(--surface-card)',
                         padding: '0.5rem 0.75rem',
                         borderRadius: 8,
                         border: '1px solid var(--border-subtle)'
                     }}>
-                        {/* Tier Selector (Free vs Free Training vs Paid) */}
+                        {/* Tier Selector (Segmented Control) */}
                         <div style={{ display: 'inline-flex', background: 'var(--surface-2)', padding: '3px', borderRadius: 8, border: '1px solid var(--border-subtle)', flexWrap: 'wrap', gap: '2px' }}>
                             <button
                                 type="button"
@@ -1124,11 +1147,12 @@ export default function EngineSettings() {
                                     padding: '0.35rem 0.75rem',
                                     borderRadius: 6,
                                     fontSize: '0.74rem',
-                                    fontWeight: 700,
+                                    fontWeight: 600,
                                     cursor: 'pointer',
-                                    border: 'none',
-                                    background: fusionTier === 'free' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'transparent',
-                                    color: fusionTier === 'free' ? '#fff' : 'var(--text-secondary)',
+                                    border: fusionTier === 'free' ? '1px solid var(--border-default)' : '1px solid transparent',
+                                    background: fusionTier === 'free' ? 'var(--surface-1)' : 'transparent',
+                                    color: fusionTier === 'free' ? 'var(--text-primary)' : 'var(--text-muted)',
+                                    boxShadow: fusionTier === 'free' ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
                                     transition: 'all 0.15s ease',
                                     display: 'flex',
                                     alignItems: 'center',
@@ -1145,11 +1169,12 @@ export default function EngineSettings() {
                                     padding: '0.35rem 0.75rem',
                                     borderRadius: 6,
                                     fontSize: '0.74rem',
-                                    fontWeight: 700,
+                                    fontWeight: 600,
                                     cursor: 'pointer',
-                                    border: 'none',
-                                    background: fusionTier === 'free_training' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
-                                    color: fusionTier === 'free_training' ? '#fff' : 'var(--text-secondary)',
+                                    border: fusionTier === 'free_training' ? '1px solid var(--border-default)' : '1px solid transparent',
+                                    background: fusionTier === 'free_training' ? 'var(--surface-1)' : 'transparent',
+                                    color: fusionTier === 'free_training' ? 'var(--text-primary)' : 'var(--text-muted)',
+                                    boxShadow: fusionTier === 'free_training' ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
                                     transition: 'all 0.15s ease',
                                     display: 'flex',
                                     alignItems: 'center',
@@ -1166,11 +1191,12 @@ export default function EngineSettings() {
                                     padding: '0.35rem 0.75rem',
                                     borderRadius: 6,
                                     fontSize: '0.74rem',
-                                    fontWeight: 700,
+                                    fontWeight: 600,
                                     cursor: 'pointer',
-                                    border: 'none',
-                                    background: fusionTier === 'paid' ? 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' : 'transparent',
-                                    color: fusionTier === 'paid' ? '#fff' : 'var(--text-secondary)',
+                                    border: fusionTier === 'paid' ? '1px solid var(--border-default)' : '1px solid transparent',
+                                    background: fusionTier === 'paid' ? 'var(--surface-1)' : 'transparent',
+                                    color: fusionTier === 'paid' ? 'var(--text-primary)' : 'var(--text-muted)',
+                                    boxShadow: fusionTier === 'paid' ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
                                     transition: 'all 0.15s ease',
                                     display: 'flex',
                                     alignItems: 'center',
@@ -1183,7 +1209,7 @@ export default function EngineSettings() {
                         </div>
 
                         {/* Mode Selector Buttons */}
-                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'inline-flex', background: 'var(--surface-2)', padding: '3px', borderRadius: 8, border: '1px solid var(--border-subtle)', flexWrap: 'wrap', gap: '2px' }}>
                             {[
                                 { id: 'reasoning', label: t('engine.fusion_mode_reasoning') || '🧠 Reasoning Trio', title: 'Terna de alto razonamiento lógico, matemáticas y código' },
                                 { id: 'speed', label: t('engine.fusion_mode_speed') || '⚡ Speed & Free', title: 'Terna de ultra-alta velocidad y respuesta instantánea' },
@@ -1195,14 +1221,17 @@ export default function EngineSettings() {
                                         key={m.id}
                                         type="button"
                                         onClick={() => setFusionMode(m.id as any)}
-                                        className={`btn btn-sm ${isActive ? 'btn-primary' : 'btn-secondary'}`}
                                         style={{
-                                            fontSize: '0.75rem',
+                                            fontSize: '0.74rem',
                                             padding: '0.35rem 0.75rem',
-                                            fontWeight: isActive ? 700 : 500,
-                                            borderColor: isActive ? 'var(--brand-orange)' : undefined,
-                                            background: isActive ? 'var(--brand-orange)' : undefined,
-                                            color: isActive ? '#fff' : undefined,
+                                            borderRadius: 6,
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            border: isActive ? '1px solid var(--border-default)' : '1px solid transparent',
+                                            background: isActive ? 'var(--surface-1)' : 'transparent',
+                                            color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
+                                            boxShadow: isActive ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
+                                            transition: 'all 0.15s ease'
                                         }}
                                         title={m.title}
                                     >
@@ -1216,12 +1245,12 @@ export default function EngineSettings() {
                     {/* Opt-In Training Guidance Notice */}
                     {fusionTier === 'free_training' && (
                         <div style={{
-                            background: 'rgba(245, 158, 11, 0.08)',
-                            border: '1px solid rgba(245, 158, 11, 0.25)',
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--border-subtle)',
                             borderRadius: 8,
                             padding: '0.55rem 0.85rem',
                             fontSize: '0.73rem',
-                            color: '#fbbf24',
+                            color: 'var(--text-secondary)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
@@ -1229,14 +1258,14 @@ export default function EngineSettings() {
                             gap: '0.5rem'
                         }}>
                             <div className="flex items-center gap-2" style={{ flex: 1, minWidth: 260 }}>
-                                <Flame size={15} color="#f59e0b" />
+                                <Flame size={15} color="var(--accent-primary)" />
                                 <span>{t('engine.fusion_training_warning')}</span>
                             </div>
                             <a
                                 href="https://openrouter.ai/settings/privacy"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                style={{ color: '#fbbf24', textDecoration: 'underline', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                                style={{ color: 'var(--text-primary)', textDecoration: 'underline', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
                             >
                                 <span>Configuración de Privacidad OpenRouter</span>
                                 <ExternalLink size={12} />
@@ -1258,7 +1287,7 @@ export default function EngineSettings() {
                                     alignItems: 'center',
                                     flexWrap: 'wrap',
                                     gap: '0.6rem',
-                                    background: 'rgba(255,255,255,0.02)',
+                                    background: 'var(--surface-2)',
                                     padding: '0.65rem 0.85rem',
                                     borderRadius: 8,
                                     border: '1px solid var(--border-subtle)'
@@ -1269,14 +1298,11 @@ export default function EngineSettings() {
                                             <span style={{
                                                 fontSize: '0.68rem',
                                                 padding: '0.1rem 0.45rem',
-                                                borderRadius: 12,
-                                                fontWeight: 700,
-                                                background: fusionTier === 'free'
-                                                    ? 'rgba(16,185,129,0.15)'
-                                                    : (fusionTier === 'free_training' ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)'),
-                                                color: fusionTier === 'free'
-                                                    ? '#34d399'
-                                                    : (fusionTier === 'free_training' ? '#fbbf24' : '#c084fc')
+                                                borderRadius: 6,
+                                                fontWeight: 600,
+                                                background: 'var(--surface-1)',
+                                                border: '1px solid var(--border-subtle)',
+                                                color: 'var(--text-secondary)'
                                             }}>
                                                 {fusionTier === 'free'
                                                     ? '⚡ Free Tier (Strict Privacy)'
@@ -1295,26 +1321,23 @@ export default function EngineSettings() {
                                         className="btn btn-primary btn-sm"
                                         style={{
                                             fontSize: '0.76rem',
-                                            padding: '0.4rem 0.95rem',
+                                            padding: '0.45rem 1rem',
                                             fontWeight: 700,
-                                            gap: '0.4rem',
-                                            background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
-                                            border: 'none',
-                                            boxShadow: '0 2px 10px rgba(249,115,22,0.35)'
+                                            gap: '0.45rem'
                                         }}
                                         title="Prueba V1 con sonda de 1 token; si está agotado o en cooldown, auto-aplica V2 o V3 sin error"
                                     >
                                         {applyingPreset ? <RefreshCw size={13} className="spin" /> : <Sparkles size={13} />}
-                                        <span>{applyingPreset ? (t('engine.fusion_advisor_applying') || 'Sondeando y aplicando...') : (t('engine.fusion_auto_best') || '✨ Auto-Seleccionar Mejor Disponible')}</span>
+                                        <span>{applyingPreset ? (t('engine.fusion_advisor_applying') || 'Sondeando y aplicando...') : (t('engine.fusion_auto_best') || 'Auto-Seleccionar Mejor')}</span>
                                     </button>
                                 </div>
 
                                 {/* 3 Ranked Fallback Version Cards */}
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.75rem' }}>
                                     {[
-                                        { id: 'v1_gold', label: t('engine.fusion_v1_gold') || '🥇 V1 Oro', badgeColor: '#fbbf24', preset: currentPresets?.v1_gold },
-                                        { id: 'v2_silver', label: t('engine.fusion_v2_silver') || '🥈 V2 Plata', badgeColor: '#94a3b8', preset: currentPresets?.v2_silver },
-                                        { id: 'v3_bronze', label: t('engine.fusion_v3_bronze') || '🥉 V3 Bronce', badgeColor: '#b45309', preset: currentPresets?.v3_bronze },
+                                        { id: 'v1_gold', label: t('engine.fusion_v1_gold') || 'V1 Principal', preset: currentPresets?.v1_gold },
+                                        { id: 'v2_silver', label: t('engine.fusion_v2_silver') || 'V2 Alternativa', preset: currentPresets?.v2_silver },
+                                        { id: 'v3_bronze', label: t('engine.fusion_v3_bronze') || 'V3 Respaldo', preset: currentPresets?.v3_bronze },
                                     ].map(v => {
                                         const p = v.preset;
                                         if (!p) {
@@ -1354,32 +1377,32 @@ export default function EngineSettings() {
                                             >
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                                     <div className="flex items-center justify-between">
-                                                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: v.badgeColor }}>
+                                                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                                                             {v.label}
                                                         </span>
                                                         {p.key_metrics?.artificialAnalysisScore && (
-                                                            <span style={{ fontSize: '0.67rem', background: 'rgba(255,255,255,0.06)', padding: '0.1rem 0.4rem', borderRadius: 4, color: 'var(--text-muted)' }}>
+                                                            <span style={{ fontSize: '0.67rem', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)', padding: '0.1rem 0.4rem', borderRadius: 4, color: 'var(--text-muted)' }}>
                                                                 AA: <b>{p.key_metrics.artificialAnalysisScore}</b>
                                                             </span>
                                                         )}
                                                     </div>
 
-                                                    <div style={{ fontSize: '0.72rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                                                            <span style={{ color: 'var(--brand-orange)', fontWeight: 700, minWidth: 16 }}>A:</span>
-                                                            <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.draft_a}</span>
+                                                    <div style={{ fontSize: '0.72rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                                            <span style={{ color: 'var(--text-muted)', fontWeight: 600, minWidth: 16 }}>A:</span>
+                                                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.draft_a}</span>
                                                         </div>
-                                                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                                                            <span style={{ color: 'var(--brand-orange)', fontWeight: 700, minWidth: 16 }}>B:</span>
-                                                            <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.draft_b}</span>
+                                                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                                            <span style={{ color: 'var(--text-muted)', fontWeight: 600, minWidth: 16 }}>B:</span>
+                                                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.draft_b}</span>
                                                         </div>
-                                                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                                                            <span style={{ color: 'var(--brand-orange)', fontWeight: 700, minWidth: 16 }}>C:</span>
-                                                            <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.draft_c}</span>
+                                                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                                            <span style={{ color: 'var(--text-muted)', fontWeight: 600, minWidth: 16 }}>C:</span>
+                                                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.draft_c}</span>
                                                         </div>
-                                                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', borderTop: '1px dashed var(--border-subtle)', paddingTop: '0.25rem' }}>
-                                                            <span style={{ color: '#c084fc', fontWeight: 700, minWidth: 16 }}>⚖️:</span>
-                                                            <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.judge}</span>
+                                                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', borderTop: '1px dashed var(--border-subtle)', paddingTop: '0.3rem', marginTop: '0.1rem' }}>
+                                                            <span style={{ color: 'var(--text-muted)', fontWeight: 600, minWidth: 16 }}>Juez:</span>
+                                                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.judge}</span>
                                                         </div>
                                                     </div>
 
@@ -1467,12 +1490,40 @@ export default function EngineSettings() {
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.25rem' }}>
                     {[
-                        { label: t('engine.fusion_slot_draft_a') || 'Modelo Contendiente 1 (Draft A)', color: 'var(--brand-orange)', placeholder: 'deepseek-chat', isJudge: false, index: 0 },
-                        { label: t('engine.fusion_slot_draft_b') || 'Modelo Contendiente 2 (Draft B)', color: 'var(--brand-orange)', placeholder: 'qwen/qwen3.8-27b', isJudge: false, index: 1 },
-                        { label: t('engine.fusion_slot_draft_c') || 'Modelo Contendiente 3 (Draft C)', color: 'var(--brand-orange)', placeholder: 'moonshotai/kimi-k3', isJudge: false, index: 2 },
-                        { label: t('engine.fusion_slot_judge') || 'Modelo Juez (Synthesizer Arbiter)', color: 'var(--text-primary)', placeholder: 'deepseek-chat', isJudge: true, index: 3 },
+                        {
+                            slotKey: 'draft_a',
+                            name: 'Draft A',
+                            label: t('engine.fusion_slot_draft_a') || 'Modelo Contendiente 1 (Draft A)',
+                            placeholder: 'deepseek-chat',
+                            isJudge: false,
+                            index: 0
+                        },
+                        {
+                            slotKey: 'draft_b',
+                            name: 'Draft B',
+                            label: t('engine.fusion_slot_draft_b') || 'Modelo Contendiente 2 (Draft B)',
+                            placeholder: 'qwen/qwen3.8-27b',
+                            isJudge: false,
+                            index: 1
+                        },
+                        {
+                            slotKey: 'draft_c',
+                            name: 'Draft C',
+                            label: t('engine.fusion_slot_draft_c') || 'Modelo Contendiente 3 (Draft C)',
+                            placeholder: 'moonshotai/kimi-k3',
+                            isJudge: false,
+                            index: 2
+                        },
+                        {
+                            slotKey: 'judge',
+                            name: 'Arbiter',
+                            label: t('engine.fusion_slot_judge') || 'Modelo Juez (Synthesizer Arbiter)',
+                            placeholder: 'deepseek-chat',
+                            isJudge: true,
+                            index: 3
+                        },
                     ].map((slot) => {
                         const i = slot.index;
                         const currentModel = slot.isJudge
@@ -1487,40 +1538,53 @@ export default function EngineSettings() {
                             <div
                                 key={i}
                                 style={{
-                                    background: 'var(--surface-1)',
-                                    border: slot.isJudge ? '1px solid rgba(192,132,252,0.35)' : '1px solid var(--border-subtle)',
-                                    borderRadius: 8,
-                                    padding: '0.85rem',
+                                    background: 'var(--surface-card)',
+                                    border: '1px solid var(--border-subtle)',
+                                    borderRadius: 12,
+                                    padding: '1.15rem',
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    gap: '0.65rem'
+                                    gap: '0.85rem',
+                                    position: 'relative',
+                                    transition: 'all 0.2s ease'
                                 }}
                             >
                                 {/* Slot Header */}
                                 <div className="flex items-center justify-between">
-                                    <label style={{
-                                        fontSize: '0.78rem',
-                                        fontWeight: 700,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.35rem',
-                                        color: slot.isJudge ? 'var(--text-primary)' : undefined,
-                                        margin: 0
-                                    }}>
-                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: slot.color }} />
-                                        {slot.label}
-                                    </label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <span style={{
+                                            fontSize: '0.68rem',
+                                            fontWeight: 700,
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.04em',
+                                            padding: '0.2rem 0.5rem',
+                                            borderRadius: 6,
+                                            background: slot.isJudge ? 'var(--surface-3)' : 'var(--surface-2)',
+                                            border: '1px solid var(--border-subtle)',
+                                            color: slot.isJudge ? 'var(--text-primary)' : 'var(--text-secondary)'
+                                        }}>
+                                            {slot.name}
+                                        </span>
+                                        <span style={{
+                                            fontSize: '0.82rem',
+                                            fontWeight: 700,
+                                            color: 'var(--text-primary)',
+                                        }}>
+                                            {slot.label.split('(')[0].trim()}
+                                        </span>
+                                    </div>
                                     <button
                                         type="button"
                                         onClick={() => toggleFusionSlotManual(i)}
                                         style={{
                                             background: 'none',
                                             border: 'none',
-                                            color: 'var(--brand-orange)',
-                                            fontSize: '0.7rem',
+                                            color: 'var(--text-muted)',
+                                            fontSize: '0.72rem',
                                             cursor: 'pointer',
                                             padding: 0,
-                                            textDecoration: 'underline'
+                                            textDecoration: 'underline',
+                                            fontWeight: 500
                                         }}
                                     >
                                         {isManual ? (t('engine.select_model_toggle') || 'Seleccionar de lista') : (t('engine.manual_model_toggle') || 'Escribir manual')}
@@ -1529,13 +1593,13 @@ export default function EngineSettings() {
 
                                 {/* Project / Channel selector (ALWAYS visible) */}
                                 <div className="form-group" style={{ margin: 0 }}>
-                                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem', fontWeight: 600 }}>
                                         {t('engine.channel_label') || 'Proyecto / Canal'}:
                                     </span>
                                     <select
                                         value={selectedKey}
                                         onChange={e => handleFusionSlotKeyChange(i, e.target.value)}
-                                        style={{ width: '100%', padding: '0.38rem 0.5rem', fontSize: '0.78rem' }}
+                                        style={{ width: '100%', padding: '0.45rem 0.6rem', fontSize: '0.8rem' }}
                                     >
                                         <option value="">-- {t('engine.source_projects_pool') || 'Seleccionar Canal / Pool'} --</option>
                                         <optgroup label={`📂 ${t('engine.source_projects_pool') || 'Proyectos (Pool con Rotación Automática)'}`}>
@@ -1565,12 +1629,12 @@ export default function EngineSettings() {
 
                                 {/* Model Selector or Input */}
                                 <div className="form-group" style={{ margin: 0 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
-                                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
                                             {t('engine.manager_model') || 'Modelo'}:
                                         </span>
                                         {slotModels.length > 0 && !isManual && (
-                                            <span style={{ fontSize: '0.66rem', color: 'var(--brand-orange)', fontWeight: 600 }}>
+                                            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>
                                                 ({slotModels.length} {t('engine.models_available') || 'disponibles'})
                                             </span>
                                         )}
@@ -1578,11 +1642,11 @@ export default function EngineSettings() {
 
                                     {isLoadingModels ? (
                                         <div style={{
-                                            display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.38rem 0.5rem',
-                                            background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 6,
-                                            fontSize: '0.75rem', color: 'var(--text-muted)'
+                                            display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.45rem 0.6rem',
+                                            background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+                                            fontSize: '0.78rem', color: 'var(--text-muted)'
                                         }}>
-                                            <RefreshCw size={12} className="spin" style={{ color: 'var(--brand-orange)' }} />
+                                            <RefreshCw size={12} className="spin" style={{ color: 'var(--text-muted)' }} />
                                             <span>{t('engine.loading_models') || 'Cargando modelos...'}</span>
                                         </div>
                                     ) : !isManual && slotModels.length > 0 ? (
@@ -1590,9 +1654,8 @@ export default function EngineSettings() {
                                             value={currentModel}
                                             onChange={e => handleFusionModelSelect(i, e.target.value)}
                                             style={{
-                                                width: '100%', padding: '0.38rem 0.5rem', fontSize: '0.8rem',
-                                                fontFamily: 'var(--font-mono)',
-                                                borderColor: slot.isJudge ? 'rgba(192,132,252,0.4)' : undefined
+                                                width: '100%', padding: '0.45rem 0.6rem', fontSize: '0.82rem',
+                                                fontFamily: 'var(--font-mono)'
                                             }}
                                         >
                                             {currentModel && !slotModels.includes(currentModel) && (
@@ -1610,9 +1673,8 @@ export default function EngineSettings() {
                                             onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
                                             placeholder={slot.placeholder}
                                             style={{
-                                                width: '100%', padding: '0.38rem 0.5rem', fontSize: '0.8rem',
-                                                fontFamily: 'var(--font-mono)',
-                                                borderColor: slot.isJudge ? 'rgba(192,132,252,0.4)' : undefined
+                                                width: '100%', padding: '0.45rem 0.6rem', fontSize: '0.82rem',
+                                                fontFamily: 'var(--font-mono)'
                                             }}
                                         />
                                     )}
@@ -1628,7 +1690,7 @@ export default function EngineSettings() {
                 <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2" style={{ fontWeight: 700, fontSize: '1rem' }}>
-                            <RateGuardianGlyph size={18} color="var(--brand-orange)" />
+                            <RateGuardianGlyph size={18} color="var(--accent-primary)" />
                             <span>{t('engine.calibrated_title')}</span>
                         </div>
                         {calibrationResult.latencyMs && (
@@ -1693,12 +1755,13 @@ export default function EngineSettings() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.75rem',
-                background: 'rgba(23, 23, 23, 0.94)',
-                backdropFilter: 'blur(12px)',
-                padding: '0.55rem 0.95rem',
+                background: 'var(--glass-bg)',
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
+                padding: '0.6rem 1rem',
                 borderRadius: 12,
-                border: '1px solid var(--border-subtle)',
-                boxShadow: '0 8px 30px rgba(0,0,0,0.5)'
+                border: '1px solid var(--border-default)',
+                boxShadow: 'var(--shadow-lg), 0 8px 32px rgba(0, 0, 0, 0.5)'
             }}>
                 {saveSuccess ? (
                     <span style={{ fontSize: '0.78rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}>

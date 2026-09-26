@@ -143,7 +143,7 @@ export const KeyCreationWizard: React.FC<KeyCreationWizardProps> = ({
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: 'var(--brand-orange)'
+                            color: 'var(--accent-primary)'
                         }}>
                             <KeyRound size={20} />
                         </div>
@@ -246,7 +246,7 @@ export const KeyCreationWizard: React.FC<KeyCreationWizardProps> = ({
                                             padding: '0.35rem 0.75rem',
                                             borderRadius: '6px',
                                             border: 'none',
-                                            background: copied ? 'var(--status-healthy)' : 'var(--brand-orange)',
+                                            background: copied ? 'var(--status-healthy)' : 'var(--accent-primary)',
                                             color: '#ffffff',
                                             fontWeight: 700,
                                             fontSize: '0.78rem',
