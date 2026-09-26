@@ -447,7 +447,7 @@ export const DEFAULT_TEST_MODELS: Record<string, string> = {
     groq: 'qwen/qwen3.8-27b',
     cerebras: 'llama3.1-8b',
     openai: 'gpt-4o-mini',
-    openrouter: 'z-ai/glm-5.3-flash',
+    openrouter: 'openrouter/free',
     mistral: 'codestral-latest',
     deepseek: 'deepseek-chat',
     puter: 'gpt-4o-mini',
@@ -598,7 +598,9 @@ export async function probeModelForKey(key: any, model: string): Promise<ProbeMo
         const errMsg = errJson?.error?.message || errJson?.message || res.statusText || `HTTP ${res.status}`;
         let cat: ProbeModelResult['errorCategory'] = 'other';
 
-        if (res.status === 404 || res.status === 400 || /not found|deprecated|retired|decommissioned|unknown model|invalid model/i.test(errMsg)) {
+        if (/free model training violation|settings\/privacy|agentic harness/i.test(errMsg)) {
+            cat = 'paid_or_exhausted';
+        } else if (res.status === 404 || res.status === 400 || /not found|deprecated|retired|decommissioned|unknown model|invalid model/i.test(errMsg)) {
             cat = 'deprecated_or_not_found';
         } else if (res.status === 402 || res.status === 403 || /billing|credit|balance|insufficient|quota|payment required|free tier limit/i.test(errMsg)) {
             cat = 'paid_or_exhausted';
@@ -772,18 +774,29 @@ export async function fetchCandidateModelsForKey(key: any, existingModels: strin
             }
         } else if (provider === 'openrouter') {
             const defaults = [
+                'openrouter/free',
+                'cohere/north-mini-code:free',
+                'qwen/qwen3.8-27b:free',
+                'thinkingmachines/inkling:free',
+                'poolside/laguna-xs-2.1:free',
+                'nvidia/nemotron-3-ultra-550b-a55b:free',
+                'nvidia/nemotron-3-super-120b-a12b:free',
+                'google/gemma-4-31b-it:free',
+                'google/gemma-4-26b-a4b-it:free',
+                'nvidia/nemotron-3.5-lightning:free',
+                'liquid/lfm-2.5-2.6b:free',
                 'z-ai/glm-5.3-flash',
                 'google/gemini-2.5-flash',
                 'deepseek/deepseek-chat',
-                'meta-llama/llama-3.3-70b-instruct:free',
-                'qwen/qwen3.8-flash',
             ];
             defaults.forEach(m => candidateSet.add(m));
             const orRes = await fetch('https://openrouter.ai/api/v1/models', { signal: AbortSignal.timeout(5000) });
             if (orRes.ok) {
                 const data: any = await orRes.json();
-                const freeOrPopular = (data.data || []).filter((m: any) => m.id?.includes(':free') || m.id?.includes('flash'));
-                freeOrPopular.slice(0, 10).forEach((m: any) => candidateSet.add(m.id));
+                const freeOrPopular = (data.data || []).filter((m: any) =>
+                    m.id?.includes(':free') || m.id === 'openrouter/free' || m.id?.includes('flash')
+                );
+                freeOrPopular.forEach((m: any) => candidateSet.add(m.id));
             }
         } else if (provider === 'deepseek') {
             ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash'].forEach(m => candidateSet.add(m));
