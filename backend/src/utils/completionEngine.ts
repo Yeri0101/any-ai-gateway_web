@@ -589,11 +589,27 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     body.model = requestedModel;
                 }
 
-                allowed = projKeys.map((k: any) => ({
-                    upstream_key_id: k.id,
-                    model_name: requestedModel,
-                    upstream_model_name: null,
-                }));
+                if (sampleProvider !== 'openrouter' && (requestedModel.includes(':free') || requestedModel.startsWith('thinkingmachines/') || requestedModel.startsWith('poolside/'))) {
+                    const { data: orKeys } = await supabase
+                        .from('upstream_keys')
+                        .select('id, provider')
+                        .eq('provider', 'openrouter');
+                    if (orKeys && orKeys.length > 0) {
+                        allowed = orKeys.map((k: any) => ({
+                            upstream_key_id: k.id,
+                            model_name: requestedModel,
+                            upstream_model_name: null,
+                        }));
+                    }
+                }
+
+                if (allowed.length === 0) {
+                    allowed = projKeys.map((k: any) => ({
+                        upstream_key_id: k.id,
+                        model_name: requestedModel,
+                        upstream_model_name: null,
+                    }));
+                }
             }
         } else {
             const keyId = targetSource.replace('key:', '');

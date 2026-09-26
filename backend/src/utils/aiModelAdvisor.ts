@@ -456,12 +456,17 @@ export async function matchTrioToUserSlots(
             }
         } else {
             // Find key by provider heuristic
-            let matchedKey = upstreamKeys.find((k: any) => {
-                const prov = k.provider?.toLowerCase() || '';
-                return targetModel.includes(prov) || (prov === 'google' && targetModel.includes('gemini'));
-            });
-            if (!matchedKey && (targetModel.includes(':free') || targetModel.startsWith('openrouter/'))) {
+            let matchedKey: any = null;
+            // 1. Models ending in :free or openrouter-hosted prefixes belong to OpenRouter
+            if (targetModel.includes(':free') || targetModel.startsWith('openrouter/') || targetModel.startsWith('thinkingmachines/') || targetModel.startsWith('poolside/')) {
                 matchedKey = upstreamKeys.find((k: any) => k.provider?.toLowerCase() === 'openrouter');
+            }
+            // 2. Otherwise find key by provider matching
+            if (!matchedKey) {
+                matchedKey = upstreamKeys.find((k: any) => {
+                    const prov = k.provider?.toLowerCase() || '';
+                    return targetModel.includes(prov) || (prov === 'google' && targetModel.includes('gemini'));
+                });
             }
             if (!matchedKey && upstreamKeys.length > 0) {
                 // If OpenRouter key is available, it can route many models
