@@ -13,7 +13,7 @@ import { ProviderIcon, PromptAnchorGlyph, RateGuardianGlyph, DualEngineGlyph, Ro
 
 type BillingType = 'paid' | 'free';
 type UpstreamKey = { id: string; provider: string; created_at: string; key_preview?: string; billing_type?: BillingType; max_context_tokens?: number | null; max_output_tokens?: number | null };
-type GatewayKey = { id: string; key_name: string; api_key: string; gateway_key_models: any[] };
+type GatewayKey = { id: string; key_name: string; api_key?: string; key_preview?: string; gateway_key_models: any[] };
 type PricingEntry = {
     id: string;
     provider: string;
@@ -682,8 +682,9 @@ export default function ProjectDetail() {
     // ── Main test handler ───────────────────────────────────────────────
     const handleTestKey = async (gatewayKey: GatewayKey) => {
         const model = testModels[gatewayKey.id] || gatewayKey.gateway_key_models?.[0]?.model_name;
-        if (!model) { toast.warning('Selecciona un modelo primero.'); return; }
-        const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : window.location.origin;
+        const baseUrl = window.location.port === '5173'
+            ? `${window.location.protocol}//${window.location.hostname}:3000`
+            : window.location.origin;
 
         setTestLoading(prev => ({ ...prev, [gatewayKey.id]: true }));
         setTestResults(prev => ({ ...prev, [gatewayKey.id]: null }));
