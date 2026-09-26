@@ -9,8 +9,14 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { supabase } from '../db';
-import { runKeyPing } from '../routes/channelTesting';
+import { runKeyPing, getProviderEndpoint } from '../routes/channelTesting';
+import { recordLatency } from './latencyGuard';
+import { callPuterAI, PUTER_MODELS } from './puterClient';
+import { invalidateGatewayKeyCache } from '../middleware/gatewayAuth';
+import { invalidateUpstreamKeyCache } from './completionEngine';
+import { providerStates } from './limitTracker';
 
 export interface ModelHistoryEvent {
     id: string;
@@ -62,11 +68,38 @@ export const KNOWN_MODEL_MIGRATIONS: Record<string, { replacement: string; provi
     'gemini-1.5-pro-preview': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Preview expired; mapped to Gemini 2.5 Flash' },
     'gemini-1.5-flash-preview': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Preview expired; mapped to Gemini 2.5 Flash' },
     'gemini-pro': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Legacy model; mapped to Gemini 2.5 Flash' },
+    'gemini-1.5-flash': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Gemini 1.5 retired; mapped to Gemini 2.5 Flash' },
+    'gemini-1.5-pro': { replacement: 'gemini-2.5-pro', provider: 'google', reason: 'Gemini 1.5 Pro retired; mapped to Gemini 2.5 Pro' },
+    'gemini-2.0-flash': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Gemini 2.0 retired (404); mapped to Gemini 2.5 Flash' },
+    'gemini-2.0-flash-exp': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Experimental expired; mapped to Gemini 2.5 Flash' },
+    'gemini-2.0-flash-001': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Deprecated endpoint; mapped to Gemini 2.5 Flash' },
+    'gemini-3.5-flash': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Retired preview alias; mapped to Gemini 2.5 Flash' },
+    'gemini-3.6-flash': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Preview alias mapped to Gemini 2.5 Flash' },
+    'gemini-3.7-flash': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Preview alias mapped to Gemini 2.5 Flash' },
+    'gemini-3-flash-preview': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Preview expired; mapped to Gemini 2.5 Flash' },
+    'nano-banana-pro-preview': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Fictitious preview alias mapped to Gemini 2.5 Flash' },
 
-    // Meta Llama 2 / 3.0 -> Modern Llama 3.3
+    // Meta Llama 2 / 3.0 -> Modern Llama 3.3 / 3.1
     'llama-2-70b-chat': { replacement: 'llama-3.3-70b-versatile', provider: 'groq', reason: 'Llama 2 retired; mapped to Llama 3.3 70B' },
     'llama-3-70b-instruct': { replacement: 'llama-3.3-70b-versatile', provider: 'groq', reason: 'Llama 3.0 superseded by Llama 3.3 70B' },
     'llama-3-8b-instruct': { replacement: 'llama-3.1-8b-instant', provider: 'groq', reason: 'Llama 3.0 8b superseded by Llama 3.1 8B' },
+
+    // DeepSeek Aliases & Deprecations
+    'deepseek-v4-flash': { replacement: 'deepseek-chat', provider: 'deepseek', reason: 'DeepSeek alias mapped to official deepseek-chat' },
+    'deepseek-v4-flash-0731': { replacement: 'deepseek-chat', provider: 'deepseek', reason: 'DeepSeek alias mapped to official deepseek-chat' },
+    'deepseek-v4-pro': { replacement: 'deepseek-reasoner', provider: 'deepseek', reason: 'DeepSeek reasoning alias mapped to deepseek-reasoner' },
+    'deepseek-v4-flash-vision-exp': { replacement: 'deepseek-chat', provider: 'deepseek', reason: 'Experimental vision alias mapped to deepseek-chat' },
+
+    // Mistral Deprecations
+    'mistral-medium-3.5': { replacement: 'mistral-small-latest', provider: 'mistral', reason: 'Retired preview; mapped to mistral-small-latest' },
+    'open-mistral-7b': { replacement: 'open-mistral-nemo', provider: 'mistral', reason: 'Superseded by Nemo 12B' },
+
+    // OpenRouter Free Models Retired / Discontinued
+    'z-ai/glm-5.2:free': { replacement: 'z-ai/glm-5.3-flash', provider: 'openrouter', reason: 'GLM 5.2 free retired (404); mapped to GLM 5.3 Flash' },
+    'z-ai/glm-5.3-flashx': { replacement: 'z-ai/glm-5.3-flash', provider: 'openrouter', reason: 'Deprecated alias; mapped to z-ai/glm-5.3-flash' },
+    'minimax/minimax-m3:free': { replacement: 'z-ai/glm-5.3-flash', provider: 'openrouter', reason: 'MiniMax free tier discontinued (404); mapped to active z-ai/glm-5.3-flash' },
+    'openai/gpt-6-luna': { replacement: 'openai/gpt-4o-mini', provider: 'openrouter', reason: 'Placeholder model mapped to GPT-4o-mini' },
+    'google/gemini-3.8-flash': { replacement: 'google/gemini-2.5-flash', provider: 'openrouter', reason: 'Placeholder model mapped to Gemini 2.5 Flash' },
 };
 
 // Local persistent changelog file
@@ -391,3 +424,619 @@ export async function repairProjectChannels(projectId: string): Promise<{
         remediationActions: remediations,
     };
 }
+
+export interface ProbeModelResult {
+    ok: boolean;
+    model: string;
+    upstreamKeyId: string;
+    provider: string;
+    statusCode: number;
+    latencyMs: number;
+    error?: string;
+    errorCategory?: 'deprecated_or_not_found' | 'paid_or_exhausted' | 'rate_limited' | 'network_or_timeout' | 'other';
+}
+
+/**
+ * Sends a lightweight, real probe completion request (1 token max) to test
+ * if an upstream key can successfully execute a model without error.
+ */
+export async function probeModelForKey(key: any, model: string): Promise<ProbeModelResult> {
+    const provider = key.provider?.toLowerCase() || '';
+    const start = Date.now();
+
+    if (provider === 'puter') {
+        try {
+            await callPuterAI(key.api_key, [{ role: 'user', content: 'hi' }], {
+                model,
+                max_tokens: 1,
+            });
+            const latencyMs = Date.now() - start;
+            recordLatency(key.id, latencyMs);
+            return {
+                ok: true,
+                model,
+                upstreamKeyId: key.id,
+                provider,
+                statusCode: 200,
+                latencyMs,
+            };
+        } catch (err: any) {
+            const latencyMs = Date.now() - start;
+            const errMsg = err?.message || 'Puter call failed';
+            let cat: ProbeModelResult['errorCategory'] = 'other';
+            if (/not found|unknown model|unsupported/i.test(errMsg)) cat = 'deprecated_or_not_found';
+            if (/quota|credit|billing|payment/i.test(errMsg)) cat = 'paid_or_exhausted';
+            return {
+                ok: false,
+                model,
+                upstreamKeyId: key.id,
+                provider,
+                statusCode: 500,
+                latencyMs,
+                error: errMsg,
+                errorCategory: cat,
+            };
+        }
+    }
+
+    const endpoint = getProviderEndpoint(provider, model, key.base_url);
+    if (!endpoint) {
+        return {
+            ok: false,
+            model,
+            upstreamKeyId: key.id,
+            provider,
+            statusCode: 400,
+            latencyMs: 0,
+            error: `Unsupported provider endpoint for ${provider}`,
+            errorCategory: 'other',
+        };
+    }
+
+    const controller = new AbortController();
+    const timeoutMs = 6000;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${key.api_key}`,
+        };
+        if (provider === 'openrouter') {
+            headers['HTTP-Referer'] = 'http://localhost:3000';
+            headers['X-Title'] = 'TierMax Discovery';
+        }
+
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                model,
+                messages: [{ role: 'user', content: 'hi' }],
+                max_tokens: 1,
+            }),
+            signal: controller.signal,
+        });
+        clearTimeout(timer);
+        const latencyMs = Date.now() - start;
+
+        if (res.ok) {
+            recordLatency(key.id, latencyMs);
+            return {
+                ok: true,
+                model,
+                upstreamKeyId: key.id,
+                provider,
+                statusCode: res.status,
+                latencyMs,
+            };
+        }
+
+        const errJson = await res.json().catch(() => ({}));
+        const errMsg = errJson?.error?.message || errJson?.message || res.statusText || `HTTP ${res.status}`;
+        let cat: ProbeModelResult['errorCategory'] = 'other';
+
+        if (res.status === 404 || res.status === 400 || /not found|deprecated|retired|decommissioned|unknown model|invalid model/i.test(errMsg)) {
+            cat = 'deprecated_or_not_found';
+        } else if (res.status === 402 || res.status === 403 || /billing|credit|balance|insufficient|quota|payment required|free tier limit/i.test(errMsg)) {
+            cat = 'paid_or_exhausted';
+        } else if (res.status === 429) {
+            cat = 'rate_limited';
+        }
+
+        return {
+            ok: false,
+            model,
+            upstreamKeyId: key.id,
+            provider,
+            statusCode: res.status,
+            latencyMs,
+            error: errMsg,
+            errorCategory: cat,
+        };
+    } catch (err: any) {
+        clearTimeout(timer);
+        const latencyMs = Date.now() - start;
+        const isTimeout = err?.name === 'AbortError';
+        return {
+            ok: false,
+            model,
+            upstreamKeyId: key.id,
+            provider,
+            statusCode: isTimeout ? 408 : 0,
+            latencyMs,
+            error: isTimeout ? 'Probe timeout (6s)' : err?.message || 'Network error',
+            errorCategory: 'network_or_timeout',
+        };
+    }
+}
+
+/**
+ * Gathers candidate models for a given upstream key from provider catalogs
+ * and existing configurations, deduplicating and limiting candidates.
+ */
+export async function fetchCandidateModelsForKey(key: any, existingModels: string[] = []): Promise<string[]> {
+    const provider = key.provider?.toLowerCase() || '';
+    const candidateSet = new Set<string>(existingModels);
+
+    try {
+        if (provider === 'google' || provider === 'vertex') {
+            candidateSet.add('gemini-2.5-flash');
+            candidateSet.add('gemini-2.5-pro');
+            const googleRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key.api_key}`, { signal: AbortSignal.timeout(5000) });
+            if (googleRes.ok) {
+                const data: any = await googleRes.json();
+                (data.models || []).forEach((m: any) => {
+                    const name = (m.name || '').replace('models/', '');
+                    const isChat = (m.supportedGenerationMethods || []).includes('generateContent');
+                    if (isChat && !name.includes('embedding') && !name.includes('aqa') && !name.includes('imagen')) {
+                        candidateSet.add(name);
+                    }
+                });
+            }
+        } else if (provider === 'groq') {
+            const defaults = [
+                'qwen/qwen3.8-27b',
+                'llama-3.3-70b-versatile',
+                'deepseek-r1-distill-llama-70b',
+                'llama-3.1-8b-instant',
+                'qwen/qwen3.6-27b',
+                'openai/gpt-oss-120b',
+                'openai/gpt-oss-20b',
+            ];
+            defaults.forEach(m => candidateSet.add(m));
+            const groqRes = await fetch('https://api.groq.com/openai/v1/models', {
+                headers: { 'Authorization': `Bearer ${key.api_key}` },
+                signal: AbortSignal.timeout(5000),
+            });
+            if (groqRes.ok) {
+                const data: any = await groqRes.json();
+                (data.data || []).forEach((m: any) => {
+                    if (m.id && !m.id.includes('whisper') && !m.id.includes('guard')) {
+                        candidateSet.add(m.id);
+                    }
+                });
+            }
+        } else if (provider === 'openrouter') {
+            const defaults = [
+                'z-ai/glm-5.3-flash',
+                'google/gemini-2.5-flash',
+                'deepseek/deepseek-chat',
+                'meta-llama/llama-3.3-70b-instruct:free',
+                'qwen/qwen3.8-flash',
+            ];
+            defaults.forEach(m => candidateSet.add(m));
+            const orRes = await fetch('https://openrouter.ai/api/v1/models', { signal: AbortSignal.timeout(5000) });
+            if (orRes.ok) {
+                const data: any = await orRes.json();
+                const freeOrPopular = (data.data || []).filter((m: any) => m.id?.includes(':free') || m.id?.includes('flash'));
+                freeOrPopular.slice(0, 10).forEach((m: any) => candidateSet.add(m.id));
+            }
+        } else if (provider === 'deepseek') {
+            ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash'].forEach(m => candidateSet.add(m));
+            const dsRes = await fetch('https://api.deepseek.com/models', {
+                headers: { 'Authorization': `Bearer ${key.api_key}` },
+                signal: AbortSignal.timeout(5000),
+            });
+            if (dsRes.ok) {
+                const data: any = await dsRes.json();
+                (data.data || []).forEach((m: any) => candidateSet.add(m.id));
+            }
+        } else if (provider === 'mistral') {
+            ['open-mistral-nemo', 'mistral-small-latest', 'codestral-latest', 'mistral-large-latest'].forEach(m => candidateSet.add(m));
+            const misRes = await fetch('https://api.mistral.ai/v1/models', {
+                headers: { 'Authorization': `Bearer ${key.api_key}` },
+                signal: AbortSignal.timeout(5000),
+            });
+            if (misRes.ok) {
+                const data: any = await misRes.json();
+                (data.data || []).forEach((m: any) => candidateSet.add(m.id));
+            }
+        } else if (provider === 'cerebras') {
+            ['llama3.3-70b', 'llama3.1-8b', 'qwen-3-235b-a22b-instruct-2507', 'gpt-oss-120b'].forEach(m => candidateSet.add(m));
+            const cbRes = await fetch('https://api.cerebras.ai/v1/models', {
+                headers: { 'Authorization': `Bearer ${key.api_key}` },
+                signal: AbortSignal.timeout(5000),
+            });
+            if (cbRes.ok) {
+                const data: any = await cbRes.json();
+                (data.data || []).forEach((m: any) => candidateSet.add(m.id));
+            }
+        } else if (provider === 'mimo') {
+            ['mimo-v2.6-flash', 'mimo-v2.6-pro', 'mimo-v2-flash', 'mimo-v2-omni', 'mimo-v2-pro'].forEach(m => candidateSet.add(m));
+        } else if (provider === 'puter') {
+            PUTER_MODELS.forEach(m => candidateSet.add(m.id));
+        } else if (provider === 'nvidia') {
+            ['meta/llama-3.3-70b-instruct', 'deepseek-ai/deepseek-v4-flash-0731', 'moonshotai/kimi-k3'].forEach(m => candidateSet.add(m));
+        } else if (provider === 'ollama') {
+            const baseUrl = (key.base_url || 'http://localhost:11434').replace(/\/+$/, '');
+            const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
+            if (res.ok) {
+                const data: any = await res.json();
+                (data.models || []).forEach((m: any) => candidateSet.add(m.name || m.model));
+            }
+        }
+    } catch (catalogErr: any) {
+        console.warn(`[ModelHealing] Catalog fetch for ${provider} (${key.id.slice(0, 8)}) failed: ${catalogErr.message}`);
+    }
+
+    // Deduplicate and cap candidates per key to keep scanning snappy
+    return Array.from(candidateSet).filter(Boolean).slice(0, 15);
+}
+
+export interface ProjectAutoDiscoveryReport {
+    projectId: string;
+    projectName: string;
+    timestamp: string;
+    summary: {
+        totalUpstreamKeys: number;
+        totalProbed: number;
+        workingCount: number;
+        prunedCount: number;
+        healedCount: number;
+        activeModelsCount: number;
+    };
+    discoveredWorkingModels: Array<{ model: string; provider: string; latencyMs: number; upstreamKeyId: string }>;
+    prunedDeadModels: Array<{ model: string; provider: string; reason: string; statusCode: number; upstreamKeyId: string }>;
+    healedMigrations: Array<{ originalModel: string; replacementModel: string; provider: string; reason: string }>;
+    activeModelsAfterSync: string[];
+}
+
+/**
+ * Intelligent Auto-Discovery, Live Validation and Deprecation Healing for a Project.
+ * Probes all candidate models on active keys, eliminates failing/paid-out models,
+ * auto-migrates deprecated ones, and binds working models to gateway_key_models.
+ */
+export async function autoDiscoverAndSyncProjectModels(projectId: string): Promise<ProjectAutoDiscoveryReport> {
+    const timestamp = new Date().toISOString();
+
+    // 1. Fetch project details
+    const { data: project } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .maybeSingle();
+
+    const projectName = project?.name || 'Unknown Project';
+
+    // 2. Fetch upstream keys
+    const { data: upstreamKeys, error: keyErr } = await supabase
+        .from('upstream_keys')
+        .select('*')
+        .eq('project_id', projectId);
+
+    if (keyErr || !upstreamKeys) {
+        throw new Error(`Failed to load upstream keys for project ${projectId}: ${keyErr?.message}`);
+    }
+
+    // 3. Fetch gateway keys for the project
+    let { data: gatewayKeys } = await supabase
+        .from('gateway_keys')
+        .select('id, key_name, api_key, gateway_key_models(id, model_name, upstream_key_id)')
+        .eq('project_id', projectId);
+
+    // If project has no gateway key, create a default one so routing is always available
+    if (!gatewayKeys || gatewayKeys.length === 0) {
+        const defaultGwId = crypto.randomUUID();
+        const defaultGwKey = `gk_${crypto.randomBytes(16).toString('hex')}`;
+        await supabase.from('gateway_keys').insert([{
+            id: defaultGwId,
+            project_id: projectId,
+            key_name: 'Default Gateway Key',
+            api_key: defaultGwKey,
+        }]);
+
+        const refetch = await supabase
+            .from('gateway_keys')
+            .select('id, key_name, api_key, gateway_key_models(id, model_name, upstream_key_id)')
+            .eq('project_id', projectId);
+        gatewayKeys = refetch.data || [];
+    }
+
+    const activeKeys = (upstreamKeys || []).filter((k: any) => {
+        if (k.is_active === false || k.is_active === 0 || k.is_active === 'false') return false;
+        if (providerStates[k.id]?.status === 'paused') return false;
+        return true;
+    });
+
+    // Map existing models configured in gateway_key_models
+    const existingModelsByKey = new Map<string, string[]>();
+    (gatewayKeys || []).forEach((gk: any) => {
+        (gk.gateway_key_models || []).forEach((m: any) => {
+            const kId = m.upstream_key_id;
+            if (kId && m.model_name) {
+                if (!existingModelsByKey.has(kId)) existingModelsByKey.set(kId, []);
+                existingModelsByKey.get(kId)!.push(m.model_name);
+            }
+        });
+    });
+
+    const discoveredWorking: ProjectAutoDiscoveryReport['discoveredWorkingModels'] = [];
+    const prunedDead: ProjectAutoDiscoveryReport['prunedDeadModels'] = [];
+    const healedMigrations: ProjectAutoDiscoveryReport['healedMigrations'] = [];
+    let totalProbed = 0;
+
+    // Set of working model names mapped to upstreamKeyId
+    const confirmedWorkingPairs: Array<{ model_name: string; upstream_key_id: string; provider: string }> = [];
+    const failedModelNamesSet = new Set<string>();
+
+    for (const key of activeKeys) {
+        const existingForThisKey = existingModelsByKey.get(key.id) || [];
+        const candidateModels = await fetchCandidateModelsForKey(key, existingForThisKey);
+
+        const CHUNK_SIZE = key.provider?.toLowerCase() === 'puter' ? 1 : 3;
+        for (let i = 0; i < candidateModels.length; i += CHUNK_SIZE) {
+            const chunk = candidateModels.slice(i, i + CHUNK_SIZE);
+            totalProbed += chunk.length;
+            const chunkResults = await Promise.all(chunk.map(c => probeModelForKey(key, c)));
+
+            for (const probeRes of chunkResults) {
+                const candidate = probeRes.model;
+
+                if (probeRes.ok) {
+                    discoveredWorking.push({
+                        model: candidate,
+                        provider: key.provider,
+                        latencyMs: probeRes.latencyMs,
+                        upstreamKeyId: key.id,
+                    });
+                    confirmedWorkingPairs.push({
+                        model_name: candidate,
+                        upstream_key_id: key.id,
+                        provider: key.provider,
+                    });
+                } else {
+                    failedModelNamesSet.add(candidate);
+
+                    // Check if candidate has a known migration to a modern free replacement
+                    const migration = KNOWN_MODEL_MIGRATIONS[candidate];
+                    let healedSuccessfully = false;
+
+                    if (migration && migration.replacement !== candidate) {
+                        // Probe the replacement model on this same key
+                        const replacementProbe = await probeModelForKey(key, migration.replacement);
+                        if (replacementProbe.ok) {
+                            healedSuccessfully = true;
+                            healedMigrations.push({
+                                originalModel: candidate,
+                                replacementModel: migration.replacement,
+                                provider: key.provider,
+                                reason: migration.reason,
+                            });
+                            confirmedWorkingPairs.push({
+                                model_name: migration.replacement,
+                                upstream_key_id: key.id,
+                                provider: key.provider,
+                            });
+                            discoveredWorking.push({
+                                model: migration.replacement,
+                                provider: key.provider,
+                                latencyMs: replacementProbe.latencyMs,
+                                upstreamKeyId: key.id,
+                            });
+
+                            recordProjectEvent({
+                                projectId,
+                                eventType: 'auto_healed',
+                                originalModel: candidate,
+                                resolvedModel: migration.replacement,
+                                provider: key.provider,
+                                reason: `Discontinued/Paid-out model '${candidate}' auto-migrated to verified working '${migration.replacement}'. (${migration.reason})`,
+                            });
+                        }
+                    }
+
+                    prunedDead.push({
+                        model: candidate,
+                        provider: key.provider,
+                        reason: healedSuccessfully
+                            ? `Replaced with ${migration?.replacement}`
+                            : probeRes.error || `HTTP ${probeRes.statusCode}`,
+                        statusCode: probeRes.statusCode,
+                        upstreamKeyId: key.id,
+                    });
+                }
+            }
+        }
+    }
+
+
+    // 4. Synchronize gateway_key_models in Database
+    // A model is pruned if it failed and is NOT confirmed working on any active key in this project
+    const workingModelNames = new Set(confirmedWorkingPairs.map(p => p.model_name));
+    const modelsToPrune = Array.from(failedModelNamesSet).filter(m => !workingModelNames.has(m));
+
+    for (const gk of gatewayKeys || []) {
+        // Prune dead models from this gateway key
+        if (modelsToPrune.length > 0) {
+            for (const deadName of modelsToPrune) {
+                await supabase
+                    .from('gateway_key_models')
+                    .delete()
+                    .eq('gateway_key_id', gk.id)
+                    .eq('model_name', deadName);
+
+                recordProjectEvent({
+                    projectId,
+                    eventType: 'model_removed',
+                    originalModel: deadName,
+                    reason: `Model probe failed (unavailable/paid/deprecated). Pruned from gateway to prevent turn failures.`,
+                });
+            }
+        }
+
+        // Add confirmed working models to this gateway key
+        const existingEntries = gk.gateway_key_models || [];
+        const existingPairKeys = new Set(existingEntries.map((e: any) => `${e.gateway_key_id || gk.id}_${e.model_name}`));
+
+        const inserts: any[] = [];
+        for (const wp of confirmedWorkingPairs) {
+            const pairKey = `${gk.id}_${wp.model_name}`;
+            if (!existingPairKeys.has(pairKey)) {
+                existingPairKeys.add(pairKey);
+                inserts.push({
+                    id: crypto.randomUUID(),
+                    gateway_key_id: gk.id,
+                    upstream_key_id: wp.upstream_key_id,
+                    model_name: wp.model_name,
+                });
+
+                recordProjectEvent({
+                    projectId,
+                    eventType: 'model_added',
+                    resolvedModel: wp.model_name,
+                    provider: wp.provider,
+                    reason: `Live probe verified 200 OK. Auto-added to project available models.`,
+                });
+            }
+        }
+
+        if (inserts.length > 0) {
+            await supabase.from('gateway_key_models').insert(inserts);
+        }
+    }
+
+    // Invalidate caches
+    invalidateGatewayKeyCache();
+    invalidateUpstreamKeyCache();
+
+    // Query updated active models
+    const { data: updatedGk } = await supabase
+        .from('gateway_keys')
+        .select('gateway_key_models(model_name)')
+        .eq('project_id', projectId);
+
+    const activeSet = new Set<string>();
+    (updatedGk || []).forEach((gk: any) => {
+        (gk.gateway_key_models || []).forEach((m: any) => {
+            if (m.model_name) activeSet.add(m.model_name);
+        });
+    });
+    const activeModelsAfterSync = Array.from(activeSet).sort();
+
+    recordProjectEvent({
+        projectId,
+        eventType: 'channel_repaired',
+        reason: `Auto-Discovery complete: Probed ${totalProbed} candidate(s). ${discoveredWorking.length} verified online, ${modelsToPrune.length} pruned, ${healedMigrations.length} auto-migrated. Total active models: ${activeModelsAfterSync.length}.`,
+        metadata: {
+            discoveredCount: discoveredWorking.length,
+            prunedCount: modelsToPrune.length,
+            healedCount: healedMigrations.length,
+            activeModels: activeModelsAfterSync,
+        },
+    });
+
+    console.log(`[ModelHealing] Project ${projectName} (${projectId}): Synced. Discovered=${discoveredWorking.length}, Pruned=${modelsToPrune.length}, Healed=${healedMigrations.length}, TotalActive=${activeModelsAfterSync.length}`);
+
+    return {
+        projectId,
+        projectName,
+        timestamp,
+        summary: {
+            totalUpstreamKeys: activeKeys.length,
+            totalProbed,
+            workingCount: discoveredWorking.length,
+            prunedCount: modelsToPrune.length,
+            healedCount: healedMigrations.length,
+            activeModelsCount: activeModelsAfterSync.length,
+        },
+        discoveredWorkingModels: discoveredWorking,
+        prunedDeadModels: prunedDead,
+        healedMigrations,
+        activeModelsAfterSync,
+    };
+}
+
+export interface AllProjectsAutoDiscoveryReport {
+    timestamp: string;
+    totalProjects: number;
+    totalWorkingDiscovered: number;
+    totalPruned: number;
+    totalHealed: number;
+    projectsSummary: Array<{
+        projectId: string;
+        projectName: string;
+        workingCount: number;
+        prunedCount: number;
+        healedCount: number;
+        activeModels: string[];
+    }>;
+}
+
+/**
+ * Executes Auto-Discovery, Live Validation and Deprecation Healing across ALL projects.
+ */
+export async function autoDiscoverAndSyncAllProjects(): Promise<AllProjectsAutoDiscoveryReport> {
+    const timestamp = new Date().toISOString();
+    const { data: allProjects, error } = await supabase
+        .from('projects')
+        .select('id, name')
+        .order('name');
+
+    if (error || !allProjects) {
+        throw new Error(`Failed to load projects: ${error?.message}`);
+    }
+
+    const projectsSummary: AllProjectsAutoDiscoveryReport['projectsSummary'] = [];
+    let totalWorkingDiscovered = 0;
+    let totalPruned = 0;
+    let totalHealed = 0;
+
+    for (const proj of allProjects) {
+        try {
+            const report = await autoDiscoverAndSyncProjectModels(proj.id);
+            totalWorkingDiscovered += report.summary.workingCount;
+            totalPruned += report.summary.prunedCount;
+            totalHealed += report.summary.healedCount;
+
+            projectsSummary.push({
+                projectId: proj.id,
+                projectName: proj.name,
+                workingCount: report.summary.workingCount,
+                prunedCount: report.summary.prunedCount,
+                healedCount: report.summary.healedCount,
+                activeModels: report.activeModelsAfterSync,
+            });
+        } catch (projErr: any) {
+            console.warn(`[ModelHealing] Auto-sync failed for project ${proj.name} (${proj.id}): ${projErr.message}`);
+            projectsSummary.push({
+                projectId: proj.id,
+                projectName: proj.name,
+                workingCount: 0,
+                prunedCount: 0,
+                healedCount: 0,
+                activeModels: [],
+            });
+        }
+    }
+
+    return {
+        timestamp,
+        totalProjects: allProjects.length,
+        totalWorkingDiscovered,
+        totalPruned,
+        totalHealed,
+        projectsSummary,
+    };
+}
+

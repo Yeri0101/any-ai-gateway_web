@@ -40,7 +40,13 @@ const DEFAULT_TEST_MODELS: Record<string, string> = {
     local: 'default',
 };
 
-function getProviderEndpoint(provider: string, model: string): string {
+export function getProviderEndpoint(provider: string, model: string, baseUrl?: string | null): string {
+    if (baseUrl && baseUrl.trim()) {
+        const clean = baseUrl.trim().replace(/\/+$/, '');
+        if (clean.endsWith('/chat/completions')) return clean;
+        if (clean.endsWith('/v1')) return `${clean}/chat/completions`;
+        return `${clean}/v1/chat/completions`;
+    }
     if (provider === 'openai') return 'https://api.openai.com/v1/chat/completions';
     if (provider === 'groq') return 'https://api.groq.com/openai/v1/chat/completions';
     if (provider === 'openrouter') return 'https://openrouter.ai/api/v1/chat/completions';

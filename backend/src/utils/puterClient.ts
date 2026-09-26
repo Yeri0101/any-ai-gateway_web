@@ -117,7 +117,23 @@ export async function callPuterAI(
     console.log(`[${ts}] [Puter] Calling puter.ai.chat model=${options.model ?? 'default'} msgs=${normalizedMessages.length}`);
 
     const startTime = Date.now();
-    const result = await puter.ai.chat(normalizedMessages, chatOptions);
+    const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Puter AI request timed out')), 6000);
+    });
+
+    let result: any;
+    try {
+        result = await Promise.race([
+            Promise.resolve(puter.ai.chat(normalizedMessages, chatOptions)).catch((err: any) => {
+                const msg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+                throw new Error(msg);
+            }),
+            timeoutPromise,
+        ]);
+    } catch (err: any) {
+        const msg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+        throw new Error(msg);
+    }
     const latency = Date.now() - startTime;
 
     console.log(`[${ts}] [Puter] Raw result type=${typeof result} isAsyncIterable=${result && typeof result[Symbol.asyncIterator] === 'function'} keys=${result && typeof result === 'object' ? Object.keys(result).join(',') : 'n/a'}`);

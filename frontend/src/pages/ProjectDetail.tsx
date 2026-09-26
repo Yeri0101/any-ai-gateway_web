@@ -128,6 +128,8 @@ export default function ProjectDetail() {
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [repairing, setRepairing] = useState(false);
     const [repairReport, setRepairReport] = useState<any | null>(null);
+    const [discovering, setDiscovering] = useState(false);
+    const [discoveryReport, setDiscoveryReport] = useState<any | null>(null);
 
     const [newProvider, setNewProvider] = useState<{ provider: string; api_key: string; billing_type: BillingType }>({ provider: 'groq', api_key: '', billing_type: 'paid' });
     const [newGateway, setNewGateway] = useState({ key_name: '', custom_key: '' });
@@ -268,6 +270,26 @@ export default function ProjectDetail() {
             toast.error(err?.message || 'Error al ejecutar diagnóstico de auto-reparación');
         } finally {
             setRepairing(false);
+        }
+    };
+
+    const handleAutoDiscover = async () => {
+        if (!id || discovering) return;
+        setDiscovering(true);
+        try {
+            const res = await fetchApi(`/projects/${id}/auto-discover-models`, { method: 'POST' });
+            if (res?.ok && res.report) {
+                setDiscoveryReport(res.report);
+                toast.success(t('healing.sync_success') || 'Modelos sincronizados exitosamente');
+                loadData();
+                loadProjectHistory();
+            } else {
+                toast.error(res?.error || 'Falló la sincronización de modelos');
+            }
+        } catch (err: any) {
+            toast.error(err?.message || 'Error al ejecutar auto-descubrimiento');
+        } finally {
+            setDiscovering(false);
         }
     };
 
@@ -1498,8 +1520,22 @@ export default function ProjectDetail() {
 
                                             {/* Models */}
                                             <div style={{ marginBottom: '1rem' }}>
-                                                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>
-                                                    {t('project.allowed_models')} ({Array.from(new Set(g.gateway_key_models?.map(m => m.model_name))).length})
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                                        {t('project.allowed_models')} ({Array.from(new Set(g.gateway_key_models?.map(m => m.model_name))).length})
+                                                    </div>
+                                                    <button
+                                                        id={`btn-sync-models-${g.id}`}
+                                                        type="button"
+                                                        onClick={handleAutoDiscover}
+                                                        disabled={discovering}
+                                                        className="btn btn-secondary btn-sm"
+                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderColor: 'var(--brand-orange)', color: 'var(--brand-orange)', fontSize: '0.72rem', padding: '0.2rem 0.6rem' }}
+                                                        title="Sondea y auto-agrega los modelos activos de las llaves del proyecto"
+                                                    >
+                                                        <Zap size={11} className={discovering ? 'spin' : ''} />
+                                                        {discovering ? t('healing.discovering') : t('healing.btn_auto_discover')}
+                                                    </button>
                                                 </div>
                                                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                                                     {Array.from(new Set(g.gateway_key_models?.map(m => m.model_name))).map((modelName: any, i) => (
@@ -1975,16 +2011,28 @@ export default function ProjectDetail() {
                                 {t('healing.subtitle')}
                             </p>
                         </div>
-                        <button
-                            id="btn-run-repair"
-                            className="btn btn-primary"
-                            onClick={handleRunRepair}
-                            disabled={repairing}
-                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                        >
-                            <RefreshCw size={14} className={repairing ? 'spin' : ''} />
-                            {repairing ? t('healing.repairing') : t('healing.btn_repair')}
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                            <button
+                                id="btn-run-repair"
+                                className="btn btn-secondary"
+                                onClick={handleRunRepair}
+                                disabled={repairing || discovering}
+                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                            >
+                                <RefreshCw size={14} className={repairing ? 'spin' : ''} />
+                                {repairing ? t('healing.repairing') : t('healing.btn_repair')}
+                            </button>
+                            <button
+                                id="btn-auto-discover-healing"
+                                className="btn btn-primary"
+                                onClick={handleAutoDiscover}
+                                disabled={discovering || repairing}
+                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                            >
+                                <Zap size={14} className={discovering ? 'spin' : ''} />
+                                {discovering ? t('healing.discovering') : t('healing.btn_auto_discover')}
+                            </button>
+                        </div>
                     </div>
 
                     {/* Stats Row */}
@@ -2016,6 +2064,146 @@ export default function ProjectDetail() {
                             </div>
                         );
                     })()}
+
+                    {/* Discovery & Model Sync Report (if auto-discovery run) */}
+                    {discoveryReport && (
+                        <div className="glass-panel" style={{ marginBottom: '1.5rem', border: '1px solid rgba(255,107,43,0.35)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                <div className="section-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <Zap size={14} color="var(--brand-orange)" />
+                                    {t('healing.modal_title')}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                        {discoveryReport.timestamp ? new Date(discoveryReport.timestamp).toLocaleTimeString() : ''}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setDiscoveryReport(null)}
+                                        className="btn btn-ghost btn-sm"
+                                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', height: 'auto' }}
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Summary Badges */}
+                            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                                <span className="badge badge-healthy" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}>
+                                    <CheckCircle2 size={12} style={{ marginRight: '0.3rem' }} />
+                                    {discoveryReport.summary?.workingCount ?? 0} {t('healing.discovered_models')}
+                                </span>
+                                {(discoveryReport.summary?.prunedCount ?? 0) > 0 && (
+                                    <span className="badge badge-error" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}>
+                                        <XCircle size={12} style={{ marginRight: '0.3rem' }} />
+                                        {discoveryReport.summary?.prunedCount} {t('healing.pruned_models')}
+                                    </span>
+                                )}
+                                {(discoveryReport.summary?.healedCount ?? 0) > 0 && (
+                                    <span className="badge badge-warning" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}>
+                                        <Zap size={12} style={{ marginRight: '0.3rem' }} />
+                                        {discoveryReport.summary?.healedCount} {t('healing.healed_models')}
+                                    </span>
+                                )}
+                                <span className="badge badge-paused" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', marginLeft: 'auto' }}>
+                                    {discoveryReport.summary?.activeModelsCount ?? 0} {t('healing.active_models')}
+                                </span>
+                            </div>
+
+                            {/* Healed Migrations Cards */}
+                            {discoveryReport.healedMigrations && discoveryReport.healedMigrations.length > 0 && (
+                                <div style={{ marginBottom: '1.25rem' }}>
+                                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--brand-orange)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>
+                                        🔄 {t('healing.healed_models')}
+                                    </div>
+                                    <div style={{ display: 'grid', gap: '0.5rem' }}>
+                                        {discoveryReport.healedMigrations.map((hm: any, idx: number) => (
+                                            <div
+                                                key={idx}
+                                                style={{
+                                                    padding: '0.75rem 1rem',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    background: 'rgba(245,158,11,0.08)',
+                                                    border: '1px solid rgba(245,158,11,0.25)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    gap: '0.75rem',
+                                                    flexWrap: 'wrap'
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                    <span style={{ textDecoration: 'line-through', color: '#f87171', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+                                                        {hm.originalModel}
+                                                    </span>
+                                                    <ArrowRight size={13} style={{ color: 'var(--text-muted)' }} />
+                                                    <span style={{ fontWeight: 700, color: '#34d399', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>
+                                                        {hm.replacementModel}
+                                                    </span>
+                                                </div>
+                                                <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                                    {hm.reason}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Verified Working Models Tags */}
+                            {discoveryReport.discoveredWorkingModels && discoveryReport.discoveredWorkingModels.length > 0 && (
+                                <div style={{ marginBottom: '1.25rem' }}>
+                                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>
+                                        ✓ {t('healing.discovered_models')} ({discoveryReport.discoveredWorkingModels.length})
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                                        {discoveryReport.discoveredWorkingModels.map((wm: any, idx: number) => (
+                                            <span
+                                                key={idx}
+                                                className="badge badge-healthy"
+                                                style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem', fontFamily: 'var(--font-mono)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                                            >
+                                                <span>{wm.model}</span>
+                                                {wm.latencyMs > 0 && (
+                                                    <span style={{ opacity: 0.8, fontSize: '0.7rem' }}>⚡{wm.latencyMs}ms</span>
+                                                )}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Pruned Dead Models List */}
+                            {discoveryReport.prunedDeadModels && discoveryReport.prunedDeadModels.length > 0 && (
+                                <div>
+                                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>
+                                        ✕ {t('healing.pruned_models')} ({discoveryReport.prunedDeadModels.length})
+                                    </div>
+                                    <div style={{ display: 'grid', gap: '0.35rem' }}>
+                                        {discoveryReport.prunedDeadModels.slice(0, 10).map((pm: any, idx: number) => (
+                                            <div
+                                                key={idx}
+                                                style={{
+                                                    padding: '0.4rem 0.75rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    background: 'rgba(239,68,68,0.06)',
+                                                    border: '1px solid rgba(239,68,68,0.15)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    fontSize: '0.78rem'
+                                                }}
+                                            >
+                                                <span style={{ fontFamily: 'var(--font-mono)', color: '#f87171' }}>{pm.model}</span>
+                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{pm.reason}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Diagnostic Findings & Actions (if diagnostic run) */}
                     {repairReport && (

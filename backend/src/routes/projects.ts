@@ -3,7 +3,7 @@ import { streamSSE } from 'hono/streaming';
 import { supabase } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import { pauseProvider } from '../utils/limitTracker';
-import { getProjectHistory, repairProjectChannels } from '../utils/modelHealing';
+import { getProjectHistory, repairProjectChannels, autoDiscoverAndSyncProjectModels, autoDiscoverAndSyncAllProjects } from '../utils/modelHealing';
 import { dashboardEvents } from '../utils/dashboardEvents';
 
 const projects = new Hono();
@@ -347,6 +347,37 @@ projects.post('/:id/repair', async (c) => {
     const { id } = c.req.param();
     try {
         const report = await repairProjectChannels(id);
+        return c.json({
+            ok: true,
+            report,
+        });
+    } catch (err: any) {
+        return c.json({ ok: false, error: err.message }, 500);
+    }
+});
+
+/**
+ * POST /api/projects/:id/auto-discover-models — Live probe validation & auto-healing sync for single project
+ */
+projects.post('/:id/auto-discover-models', async (c) => {
+    const { id } = c.req.param();
+    try {
+        const report = await autoDiscoverAndSyncProjectModels(id);
+        return c.json({
+            ok: true,
+            report,
+        });
+    } catch (err: any) {
+        return c.json({ ok: false, error: err.message }, 500);
+    }
+});
+
+/**
+ * POST /api/projects/auto-heal-all-models — Global live probe validation & auto-healing sync across ALL projects
+ */
+projects.post('/auto-heal-all-models', async (c) => {
+    try {
+        const report = await autoDiscoverAndSyncAllProjects();
         return c.json({
             ok: true,
             report,

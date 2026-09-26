@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../api';
-import { FolderOpen, Plus, Trash2, Edit2, Zap, Palette, Key, Activity, Copy, Check, DollarSign } from 'lucide-react';
+import { FolderOpen, Plus, Trash2, Edit2, Zap, Palette, Key, Activity, Copy, Check, DollarSign, CheckCircle2, XCircle } from 'lucide-react';
 import { TierMaxLogo, AnthropicIcon, RouterCascadeGlyph, DualEngineGlyph } from '../components/Icons';
 import { useLanguage } from '../i18n';
 import { useToast } from '../ToastContext';
@@ -98,6 +98,28 @@ export default function Dashboard() {
     const [newCallHighlight, setNewCallHighlight] = useState(false);
     const [isInspectorOpen, setIsInspectorOpen] = useState(false);
     const [cacheStats, setCacheStats] = useState<any>(null);
+    const [isHealingAll, setIsHealingAll] = useState(false);
+    const [healAllReport, setHealAllReport] = useState<any | null>(null);
+
+    const handleAutoHealAll = async () => {
+        if (isHealingAll) return;
+        setIsHealingAll(true);
+        try {
+            toast.success(t('healing.scanning_all') || 'Escaneando y validando modelos de todos los proyectos...');
+            const res = await fetchApi('/projects/auto-heal-all-models', { method: 'POST' });
+            if (res?.ok && res.report) {
+                setHealAllReport(res.report);
+                toast.success(`Escaneo global completado: ${res.report.totalWorkingDiscovered} verificados, ${res.report.totalPruned} depurados, ${res.report.totalHealed} auto-migrados.`);
+                loadOverview(false);
+            } else {
+                toast.error(res?.error || 'Falló el auto-escaneo global');
+            }
+        } catch (err: any) {
+            toast.error(err?.message || 'Error al ejecutar auto-escaneo de todos los proyectos');
+        } finally {
+            setIsHealingAll(false);
+        }
+    };
 
     const loadOverview = async (silent = false) => {
         try {
@@ -667,11 +689,103 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* Section label */}
-            <div className="section-label" style={{ marginBottom: '1rem' }}>
-                <FolderOpen size={12} />
-                Projects ({projects.length})
+            {/* Section label & Global Auto-Scan Button */}
+            <div className="section-label" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <FolderOpen size={12} />
+                    Projects ({projects.length})
+                </div>
+                <button
+                    id="btn-auto-heal-all"
+                    type="button"
+                    onClick={handleAutoHealAll}
+                    disabled={isHealingAll}
+                    className="btn btn-secondary btn-sm"
+                    style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.45rem',
+                        borderColor: 'var(--brand-orange)',
+                        color: 'var(--brand-orange)',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        padding: '0.35rem 0.85rem'
+                    }}
+                    title="Realiza llamadas de prueba a cada LLM de cada proyecto, elimina modelos muertos/de pago y vincula los funcionales"
+                >
+                    <Zap size={13} className={isHealingAll ? 'spin' : ''} />
+                    {isHealingAll ? t('healing.scanning_all') : t('healing.btn_sync_all')}
+                </button>
             </div>
+
+            {/* Global Heal Report Card */}
+            {healAllReport && (
+                <div className="glass-panel" style={{ marginBottom: '1.5rem', border: '1px solid rgba(255,107,43,0.35)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '0.92rem', color: 'var(--text-primary)' }}>
+                            <Zap size={14} color="var(--brand-orange)" />
+                            {t('healing.modal_title')} — Todos los Proyectos
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setHealAllReport(null)}
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', height: 'auto' }}
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                        <span className="badge badge-healthy" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}>
+                            <CheckCircle2 size={12} style={{ marginRight: '0.3rem' }} />
+                            {healAllReport.totalWorkingDiscovered} {t('healing.discovered_models')}
+                        </span>
+                        {healAllReport.totalPruned > 0 && (
+                            <span className="badge badge-error" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}>
+                                <XCircle size={12} style={{ marginRight: '0.3rem' }} />
+                                {healAllReport.totalPruned} {t('healing.pruned_models')}
+                            </span>
+                        )}
+                        {healAllReport.totalHealed > 0 && (
+                            <span className="badge badge-warning" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}>
+                                <Zap size={12} style={{ marginRight: '0.3rem' }} />
+                                {healAllReport.totalHealed} {t('healing.healed_models')}
+                            </span>
+                        )}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.6rem' }}>
+                        {(healAllReport.projectsSummary || []).map((ps: any) => (
+                            <div
+                                key={ps.projectId}
+                                style={{
+                                    padding: '0.65rem 0.85rem',
+                                    borderRadius: 'var(--radius-md)',
+                                    background: 'var(--surface-1)',
+                                    border: '1px solid var(--border-subtle)',
+                                    fontSize: '0.8rem',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '0.35rem'
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{ps.projectName}</span>
+                                    <span className="badge badge-paused" style={{ fontSize: '0.7rem' }}>
+                                        {ps.activeModels.length} activos
+                                    </span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                    <span style={{ color: '#10b981' }}>✓ {ps.workingCount} OK</span>
+                                    {ps.prunedCount > 0 && <span style={{ color: '#ef4444' }}>✕ {ps.prunedCount} eliminados</span>}
+                                    {ps.healedCount > 0 && <span style={{ color: '#f59e0b' }}>🔄 {ps.healedCount} migrados</span>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Projects Grid */}
             <div className="projects-grid">

@@ -8,6 +8,14 @@ import * as dns from 'node:dns';
 // Fix for Node.js fetch() timeout on Windows with Google APIs IPv6 
 dns.setDefaultResultOrder('ipv4first');
 
+// Enterprise Process Resilience: Prevent unhandled rejections from crashing the gateway
+process.on('unhandledRejection', (reason: any) => {
+    console.error('[UnhandledRejection Caught]', reason?.message || reason);
+});
+process.on('uncaughtException', (err: any) => {
+    console.error('[UncaughtException Caught]', err?.message || err);
+});
+
 import { supabase, dbType, isLocalDb } from './db';
 import { serveStatic } from '@hono/node-server/serve-static';
 import * as fs from 'fs';
