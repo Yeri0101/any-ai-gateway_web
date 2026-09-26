@@ -179,12 +179,25 @@ export function selectFusionPanel(gatewayKey: any, body?: any): { panel: string[
     return { panel: selectedPanel, judge };
 }
 
+function pruneMessageContent(content: any, maxLen = 1500): string {
+    if (!content) return '';
+    if (typeof content === 'string') {
+        return content.length > maxLen ? content.slice(0, maxLen) + '... [truncated for context efficiency]' : content;
+    }
+    const str = JSON.stringify(content);
+    return str.length > maxLen ? str.slice(0, maxLen) + '... [truncated]' : str;
+}
+
 /**
  * Builds the dialectical meta-prompt for the judge / synthesizer model.
  */
 export function buildDialecticalPrompt(userMessages: any[], drafts: FusionDraft[]): any[] {
-    // Extract last user message or context
-    const userPrompt = userMessages.map(m => `[${m.role.toUpperCase()}]: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`).join('\n\n');
+    // Keep initial instruction/context + recent turns to stay well within upstream context windows
+    const recentMessages = userMessages.length > 20
+        ? [userMessages[0], ...userMessages.slice(-19)]
+        : userMessages;
+
+    const userPrompt = recentMessages.map(m => `[${(m.role || 'user').toUpperCase()}]: ${pruneMessageContent(m.content)}`).join('\n\n');
 
     const draftsSection = drafts
         .map((d, i) => `### Perspective / Draft ${i + 1} (${d.model}):\n${d.content.trim()}`)
@@ -259,12 +272,24 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
         };
     }
 
-    // 1. Dispatch 3 drafts in parallel with per-draft 15s timeout
+    // 1. Dispatch 3 drafts in parallel with per-draft 10s timeout
     const draftPromises = panel.map(async (model, idx): Promise<FusionDraft> => {
         const draftStart = Date.now();
         const slotSource = slotProjects[idx] || '';
+
+        // Prune massive history if conversation is very long
+        const draftMessages = (body.messages && body.messages.length > 25)
+            ? [body.messages[0], ...body.messages.slice(-24).map((m: any) => ({
+                ...m,
+                content: typeof m.content === 'string' && m.content.length > 2000
+                    ? m.content.slice(0, 2000) + '... [truncated for context limit]'
+                    : m.content
+              }))]
+            : body.messages;
+
         const draftBody = {
             ...body,
+            messages: draftMessages,
             model,
             stream: false, // Drafts are always collected in memory
             max_tokens: Math.min(body.max_tokens || 1024, 2048),
@@ -279,7 +304,7 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
         });
 
         const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error(`Draft timeout for ${model} after 25s`)), 25000)
+            setTimeout(() => reject(new Error(`Draft timeout for ${model} after 10s`)), 10000)
         );
 
         const result: any = await Promise.race([execPromise, timeoutPromise]);

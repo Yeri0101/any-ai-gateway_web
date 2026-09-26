@@ -1211,13 +1211,29 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             delete forwardBody.max_completion_tokens;
 
             if (Array.isArray(forwardBody.messages)) {
+                const hasTools = Array.isArray(forwardBody.tools) && forwardBody.tools.length > 0;
                 forwardBody.messages = forwardBody.messages.map((msg: any) => {
                     let content = msg.content;
                     if (Array.isArray(content)) {
                         content = content.map((b: any) => typeof b === 'string' ? b : b?.text ?? '').join('');
                     }
-                    if (msg.role === 'tool') return { role: 'user', content: content ?? '' };
-                    if (msg.role === 'assistant' && (content === null || content === undefined)) content = '';
+                    if (msg.role === 'tool') {
+                        if (hasTools) {
+                            return {
+                                role: 'tool',
+                                tool_call_id: msg.tool_call_id || msg.id || 'call_0',
+                                content: content ?? '',
+                            };
+                        }
+                        return { role: 'user', content: content ?? '' };
+                    }
+                    if (msg.role === 'assistant') {
+                        if (!hasTools && msg.tool_calls) {
+                            const { tool_calls, ...rest } = msg;
+                            return { ...rest, content: content || '[Tool call completed]' };
+                        }
+                        if (content === null || content === undefined) content = '';
+                    }
                     return { ...msg, content };
                 });
             }
@@ -1413,14 +1429,23 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                         s.onAbort(() => reader.cancel().catch(() => { }));
                         const chunksToCache: string[] = [];
                         const textDecoder = new TextDecoder();
+                        const textEncoder = new TextEncoder();
 
                         try {
                             while (true) {
                                 const { done, value } = await reader.read();
                                 if (done) break;
                                 if (value) {
-                                    chunksToCache.push(textDecoder.decode(value, { stream: true }));
-                                    await s.write(value);
+                                    const rawText = textDecoder.decode(value, { stream: true });
+                                    chunksToCache.push(rawText);
+                                    if (rawText.includes('function_call_filter') || rawText.includes('MALFORMED')) {
+                                        const sanitized = rawText
+                                            .replace(/"finish_reason"\s*:\s*"[^"]*function_call_filter[^"]*"/g, '"finish_reason":"stop"')
+                                            .replace(/"finish_reason"\s*:\s*"[^"]*MALFORMED[^"]*"/g, '"finish_reason":"stop"');
+                                        await s.write(textEncoder.encode(sanitized));
+                                    } else {
+                                        await s.write(value);
+                                    }
                                 }
                             }
                             if (cacheKey && chunksToCache.length > 0) {
@@ -1492,6 +1517,13 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     }).catch(() => { });
 
     if (finalResponse) {
+        if (finalResponse?.choices && Array.isArray(finalResponse.choices)) {
+            for (const choice of finalResponse.choices) {
+                if (typeof choice.finish_reason === 'string' && (choice.finish_reason.includes('function_call_filter') || choice.finish_reason.includes('MALFORMED'))) {
+                    choice.finish_reason = 'stop';
+                }
+            }
+        }
         if (isHealed && healingInfo) {
             finalResponse._openclaw_healing = {
                 healed: true,
