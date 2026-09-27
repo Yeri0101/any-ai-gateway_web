@@ -53,13 +53,13 @@ const DEFAULT_ENGINE_CONFIG: EngineConfig = {
 
     managerProvider: (process.env.MANAGER_LLM_PROVIDER as any) || 'google',
     managerApiKey: process.env.MANAGER_LLM_API_KEY || '',
-    managerModel: process.env.MANAGER_LLM_MODEL || 'gemini-2.5-flash',
+    managerModel: process.env.MANAGER_LLM_MODEL || 'gemini-3.8-flash',
     managerBaseUrl: process.env.MANAGER_LLM_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai',
     managerTemperature: 0.2,
     managerProjectId: '',
     managerUpstreamKeyId: '',
 
-    fusionDefaultModels: ['deepseek-chat', 'qwen/qwen3.8-27b', 'gemini-2.5-flash'],
+    fusionDefaultModels: ['deepseek-chat', 'qwen/qwen3.8-27b', 'gemini-3.5-flash-lite'],
     fusionDefaultJudge: 'qwen/qwen3.8-27b',
     fusionSlotProjects: ['', '', '', ''],
 };
@@ -426,7 +426,7 @@ export async function executeManagerLLM(
         url = url.replace(/\/+$/, '') + '/chat/completions';
     }
 
-    const model = overrides?.model || currentConfig.managerModel || 'gemini-2.5-flash';
+    const model = overrides?.model || currentConfig.managerModel || 'gemini-3.8-flash';
 
     const messages = [
         ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),

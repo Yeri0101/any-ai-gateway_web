@@ -63,20 +63,16 @@ export const KNOWN_MODEL_MIGRATIONS: Record<string, { replacement: string; provi
     'claude-instant-1.2': { replacement: 'claude-3-5-haiku-20241022', provider: 'anthropic', reason: 'Claude Instant retired; mapped to Claude 3.5 Haiku' },
 
     // Google Gemini Preview / Deprecated Models
-    'gemini-1.0-pro': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Gemini 1.0 retired; mapped to Gemini 2.5 Flash' },
-    'gemini-1.5-pro-preview': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Preview expired; mapped to Gemini 2.5 Flash' },
-    'gemini-1.5-flash-preview': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Preview expired; mapped to Gemini 2.5 Flash' },
-    'gemini-pro': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Legacy model; mapped to Gemini 2.5 Flash' },
-    'gemini-1.5-flash': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Gemini 1.5 retired; mapped to Gemini 2.5 Flash' },
-    'gemini-1.5-pro': { replacement: 'gemini-2.5-pro', provider: 'google', reason: 'Gemini 1.5 Pro retired; mapped to Gemini 2.5 Pro' },
-    'gemini-2.0-flash': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Gemini 2.0 retired (404); mapped to Gemini 2.5 Flash' },
-    'gemini-2.0-flash-exp': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Experimental expired; mapped to Gemini 2.5 Flash' },
-    'gemini-2.0-flash-001': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Deprecated endpoint; mapped to Gemini 2.5 Flash' },
-    'gemini-3.5-flash': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Retired preview alias; mapped to Gemini 2.5 Flash' },
-    'gemini-3.6-flash': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Preview alias mapped to Gemini 2.5 Flash' },
-    'gemini-3.7-flash': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Preview alias mapped to Gemini 2.5 Flash' },
-    'gemini-3-flash-preview': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Preview expired; mapped to Gemini 2.5 Flash' },
-    'nano-banana-pro-preview': { replacement: 'gemini-2.5-flash', provider: 'google', reason: 'Fictitious preview alias mapped to Gemini 2.5 Flash' },
+    'gemini-1.0-pro': { replacement: 'gemini-3.8-flash', provider: 'google', reason: 'Gemini 1.0 retired; mapped to Gemini 3.8 Flash' },
+    'gemini-1.5-pro-preview': { replacement: 'gemini-3.8-flash', provider: 'google', reason: 'Preview expired; mapped to Gemini 3.8 Flash' },
+    'gemini-1.5-flash-preview': { replacement: 'gemini-3.8-flash', provider: 'google', reason: 'Preview expired; mapped to Gemini 3.8 Flash' },
+    'gemini-pro': { replacement: 'gemini-3.8-flash', provider: 'google', reason: 'Legacy model; mapped to Gemini 3.8 Flash' },
+    'gemini-1.5-flash': { replacement: 'gemini-3.8-flash', provider: 'google', reason: 'Gemini 1.5 retired; mapped to Gemini 3.8 Flash' },
+    'gemini-1.5-pro': { replacement: 'gemini-3.8-flash', provider: 'google', reason: 'Gemini 1.5 Pro retired; mapped to Gemini 3.8 Flash' },
+    'gemini-2.0-flash': { replacement: 'gemini-3.8-flash', provider: 'google', reason: 'Gemini 2.0 retired (404); mapped to Gemini 3.8 Flash' },
+    'gemini-2.0-flash-exp': { replacement: 'gemini-3.8-flash', provider: 'google', reason: 'Experimental expired; mapped to Gemini 3.8 Flash' },
+    'gemini-2.0-flash-001': { replacement: 'gemini-3.8-flash', provider: 'google', reason: 'Deprecated endpoint; mapped to Gemini 3.8 Flash' },
+    'nano-banana-pro-preview': { replacement: 'gemini-3.8-flash', provider: 'google', reason: 'Fictitious preview alias mapped to Gemini 3.8 Flash' },
 
     // Meta Llama 2 / 3.0 -> Modern Llama 3.3 / 3.1
     'llama-2-70b-chat': { replacement: 'llama-3.3-70b-versatile', provider: 'groq', reason: 'Llama 2 retired; mapped to Llama 3.3 70B' },
@@ -98,7 +94,6 @@ export const KNOWN_MODEL_MIGRATIONS: Record<string, { replacement: string; provi
     'z-ai/glm-5.3-flashx': { replacement: 'z-ai/glm-5.3-flash', provider: 'openrouter', reason: 'Deprecated alias; mapped to z-ai/glm-5.3-flash' },
     'minimax/minimax-m3:free': { replacement: 'z-ai/glm-5.3-flash', provider: 'openrouter', reason: 'MiniMax free tier discontinued (404); mapped to active z-ai/glm-5.3-flash' },
     'openai/gpt-6-luna': { replacement: 'openai/gpt-4o-mini', provider: 'openrouter', reason: 'Placeholder model mapped to GPT-4o-mini' },
-    'google/gemini-3.8-flash': { replacement: 'google/gemini-2.5-flash', provider: 'openrouter', reason: 'Placeholder model mapped to Gemini 2.5 Flash' },
 };
 
 // Local persistent changelog file
@@ -456,8 +451,8 @@ export interface TestResult {
 }
 
 export const DEFAULT_TEST_MODELS: Record<string, string> = {
-    google: 'gemini-2.5-flash',
-    vertex: 'gemini-2.5-flash',
+    google: 'gemini-3.8-flash',
+    vertex: 'gemini-3.8-flash',
     groq: 'qwen/qwen3.8-27b',
     cerebras: 'llama3.1-8b',
     openai: 'gpt-4o-mini',
@@ -570,7 +565,7 @@ export async function probeModelForKey(key: any, model: string): Promise<ProbeMo
     }
 
     const controller = new AbortController();
-    const timeoutMs = 6000;
+    const timeoutMs = 10000;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -693,6 +688,16 @@ export async function runKeyPing(key: any, candidateModels?: string[]): Promise<
         healedCandidates.push(fallback);
     }
 
+    if (provider === 'google' || provider === 'vertex') {
+        // Ensure Gemini 3.8 Flash is prioritized, with 3.7 and 3.5-lite as resilient fallbacks
+        const googleCandidates = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.5-flash'];
+        for (const gc of googleCandidates) {
+            if (!healedCandidates.includes(gc)) {
+                healedCandidates.push(gc);
+            }
+        }
+    }
+
     // Deduplicate while preserving order
     const uniqueModels = Array.from(new Set(healedCandidates));
 
@@ -717,9 +722,9 @@ export async function runKeyPing(key: any, candidateModels?: string[]): Promise<
             };
         }
 
-        // If the error was because the model is deprecated/not found or payment required,
+        // If the error was because the model is deprecated/not found, payment required, or 503/429 capacity,
         // try the next candidate model so a valid key isn't falsely marked dead!
-        if (probeRes.errorCategory === 'deprecated_or_not_found' || probeRes.errorCategory === 'paid_or_exhausted') {
+        if (probeRes.errorCategory === 'deprecated_or_not_found' || probeRes.errorCategory === 'paid_or_exhausted' || probeRes.statusCode === 503 || probeRes.statusCode === 429) {
             continue;
         }
 

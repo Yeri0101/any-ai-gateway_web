@@ -406,7 +406,7 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
     // Fallback: If 0 drafts succeeded, engage Emergency Solo Fallback to protect agent session
     if (successfulDrafts.length === 0) {
         console.warn(`[Fusion] ⚠️ All drafts failed in panel (${panel.join(', ')}). Engaging Emergency Solo Fallback.`);
-        const emergencyCandidates = ['qwen/qwen3.8-27b', 'gemini-2.5-flash', 'llama-3.3-70b-versatile', 'google/gemma-4-31b-it:free'];
+        const emergencyCandidates = ['qwen/qwen3.8-27b', 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'llama-3.3-70b-versatile', 'google/gemma-4-31b-it:free'];
         for (const candidate of emergencyCandidates) {
             try {
                 console.log(`[Fusion] Attempting emergency solo fallback model: ${candidate}`);

@@ -73,8 +73,14 @@ channelTesting.post('/test-project/:projectId', async (c) => {
         });
     });
 
+    const body = await c.req.json().catch(() => ({}));
+    const forcedModel = body?.model;
+
     // Execute pings with project-aware models
-    const results = await Promise.all((keys || []).map((k: any) => runKeyPing(k, modelsByKey[k.id])));
+    const results = await Promise.all((keys || []).map((k: any) => {
+        const candidateModels = forcedModel ? [forcedModel] : modelsByKey[k.id];
+        return runKeyPing(k, candidateModels);
+    }));
     return c.json({
         projectId,
         count: results.length,

@@ -82,7 +82,8 @@ v1.get('/models', async (c) => {
 
     if (modelList.length === 1) {
         modelList.push(
-            { id: 'gemini-2.5-flash', object: 'model', created: Math.floor(Date.now() / 1000), owned_by: 'tiermax', permission: [], root: 'gemini-2.5-flash', parent: null },
+            { id: 'gemini-3.8-flash', object: 'model', created: Math.floor(Date.now() / 1000), owned_by: 'tiermax', permission: [], root: 'gemini-3.8-flash', parent: null },
+            { id: 'gemini-3.5-flash-lite', object: 'model', created: Math.floor(Date.now() / 1000), owned_by: 'tiermax', permission: [], root: 'gemini-3.5-flash-lite', parent: null },
             { id: 'llama-3.3-70b-versatile', object: 'model', created: Math.floor(Date.now() / 1000), owned_by: 'tiermax', permission: [], root: 'llama-3.3-70b-versatile', parent: null }
         );
     }

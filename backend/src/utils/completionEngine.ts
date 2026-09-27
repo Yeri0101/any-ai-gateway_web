@@ -1033,7 +1033,8 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 tpm: upstream.tpm_limit,
                 rpd: upstream.rpd_limit,
                 tpd: upstream.tpd_limit,
-            }
+            },
+            requestedModel
         );
 
         if (!guardianCheck.canProceedImmediately) {

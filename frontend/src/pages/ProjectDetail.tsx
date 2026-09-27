@@ -2581,11 +2581,27 @@ export default function ProjectDetail() {
                             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                                 <button
                                     type="button"
-                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 15, tpm: 1000000, rpd: 1500 } : null)}
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 5, tpm: 250000, rpd: 20 } : null)}
                                     className="btn btn-secondary btn-sm"
                                     style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
                                 >
-                                    Gemini Flash (15 RPM)
+                                    Gemini 3.8 Flash (5 RPM / 20 RPD)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 15, tpm: 250000, rpd: 1000 } : null)}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
+                                >
+                                    Gemini 3.5 Lite (15 RPM / 1k RPD)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 10, tpm: 250000, rpd: 250 } : null)}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
+                                >
+                                    Gemini 3.5 Flash (10 RPM / 250 RPD)
                                 </button>
                                 <button
                                     type="button"
@@ -2594,14 +2610,6 @@ export default function ProjectDetail() {
                                     style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
                                 >
                                     Groq (30 RPM)
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 30, tpm: 60000, rpd: 14400 } : null)}
-                                    className="btn btn-secondary btn-sm"
-                                    style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
-                                >
-                                    Cerebras (30 RPM)
                                 </button>
                                 <button
                                     type="button"

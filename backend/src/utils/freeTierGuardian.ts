@@ -46,9 +46,9 @@ export interface KeyRateLimitState {
 // Baseline known free tier limits by provider
 export const DEFAULT_FREE_TIER_PROFILES: Record<string, RateLimitProfile> = {
     google: {
-        rpm: 15,            // Gemini 1.5/2.0 Flash free tier
-        tpm: 1_000_000,
-        rpd: 1_500,
+        rpm: 10,            // Baseline Gemini Flash free tier
+        tpm: 250_000,
+        rpd: 250,
         tpd: 100_000_000,
     },
     groq: {
@@ -95,6 +95,40 @@ export const DEFAULT_FREE_TIER_PROFILES: Record<string, RateLimitProfile> = {
     },
 };
 
+// Granular free tier rate limits by model (Google Gemini tiered free quotas)
+export const MODEL_RATE_LIMIT_PROFILES: Record<string, RateLimitProfile> = {
+    'gemini-3.8-flash': {
+        rpm: 5,
+        tpm: 250_000,
+        rpd: 20,
+        tpd: 10_000_000,
+    },
+    'gemini-3.7-flash': {
+        rpm: 5,
+        tpm: 250_000,
+        rpd: 50,
+        tpd: 25_000_000,
+    },
+    'gemini-3.6-flash': {
+        rpm: 10,
+        tpm: 250_000,
+        rpd: 100,
+        tpd: 50_000_000,
+    },
+    'gemini-3.5-flash': {
+        rpm: 10,
+        tpm: 250_000,
+        rpd: 250,
+        tpd: 100_000_000,
+    },
+    'gemini-3.5-flash-lite': {
+        rpm: 15,
+        tpm: 250_000,
+        rpd: 1_000,
+        tpd: 250_000_000,
+    },
+};
+
 import fs from 'fs';
 import path from 'path';
 
@@ -136,16 +170,21 @@ export function getOrCreateKeyState(
     upstreamKeyId: string,
     provider: string,
     billingType: 'free' | 'paid' = 'free',
-    customLimits?: Partial<RateLimitProfile>
+    customLimits?: Partial<RateLimitProfile>,
+    model?: string
 ): KeyRateLimitState {
     let state = keyStates.get(upstreamKeyId);
     const today = getTodayString();
 
+    const normalizedModel = (model || '').toLowerCase().replace(/^(google|vertex)\//, '');
+    const modelProfile = MODEL_RATE_LIMIT_PROFILES[normalizedModel];
+
     if (!state) {
         const isFree = billingType === 'free';
-        const profile = isFree
+        const baseProfile = isFree
             ? (DEFAULT_FREE_TIER_PROFILES[provider.toLowerCase()] || DEFAULT_FREE_TIER_PROFILES.google)
             : DEFAULT_FREE_TIER_PROFILES.default_paid;
+        const profile = modelProfile && isFree ? modelProfile : baseProfile;
 
         const effectiveCustom = customLimits || persistedCustomLimits[upstreamKeyId];
         state = {
@@ -176,6 +215,13 @@ export function getOrCreateKeyState(
             if (state.status === 'daily_exhausted') {
                 state.status = 'healthy';
             }
+        }
+        // If not custom limit, adapt to model limits dynamically if model profile exists
+        if (!state.isCustomLimit && modelProfile && state.isFreeTier) {
+            state.rpmLimit = modelProfile.rpm;
+            state.tpmLimit = modelProfile.tpm;
+            state.rpdLimit = modelProfile.rpd;
+            state.tpdLimit = modelProfile.tpd;
         }
         // Update custom limits if provided
         if (customLimits) {
@@ -233,14 +279,15 @@ export function checkRateLimitCapacity(
     provider: string,
     billingType: 'free' | 'paid' = 'free',
     estimatedTokens: number = 200,
-    customLimits?: Partial<RateLimitProfile>
+    customLimits?: Partial<RateLimitProfile>,
+    model?: string
 ): {
     canProceedImmediately: boolean;
     shouldWaitMs: number;
     reason?: string;
     state: KeyRateLimitState;
 } {
-    const state = getOrCreateKeyState(upstreamKeyId, provider, billingType, customLimits);
+    const state = getOrCreateKeyState(upstreamKeyId, provider, billingType, customLimits, model);
     const now = Date.now();
 
     // 1. If currently in cooldown or daily exhausted
