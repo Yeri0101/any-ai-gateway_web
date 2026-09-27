@@ -37,11 +37,11 @@ import { BASE_2026_BENCHMARK_MATRIX, FusionTier } from './aiModelAdvisor';
  */
 const DEFAULT_FUSION_PANEL = [
     'qwen/qwen3.8-27b',
-    'gemini-2.5-flash',
-    'deepseek-chat',
+    'google/diffusiongemma-26b-a4b-it',
+    'mimo-v2.6-flash',
+    'openai/gpt-oss-120b',
+    'llama-3.3-70b-versatile',
     'open-mistral-nemo',
-    'meta/llama-3.3-70b-instruct',
-    'moonshotai/kimi-k3',
 ];
 
 /**
@@ -173,7 +173,7 @@ export function selectFusionPanel(gatewayKey: any, body?: any): { panel: string[
         } catch (_) {}
     }
     if (!judge) {
-        judge = selectedPanel.find(m => m.includes('mimo') || m.includes('deepseek') || m.includes('qwen') || m.includes('llama')) || selectedPanel[0];
+        judge = selectedPanel.find(m => m.includes('openai') || m.includes('qwen') || m.includes('mimo') || m.includes('deepseek')) || selectedPanel[0];
     }
 
     return { panel: selectedPanel, judge };
@@ -244,29 +244,64 @@ export async function executeFusion(options: FusionExecuteOptions): Promise<{
     // 0. Agent Tool Passthrough:
     // If the client provides tools (e.g. OpenClaw agent executing tasks like inspecting files, running bash, etc.),
     // dialectical text synthesis cannot produce valid tool_calls and breaks agent execution.
-    // In this mode, route directly to the premier tool-capable model (the judge or designated tool model).
+    // In this mode, route directly to the premier tool-capable model (the judge or designated tool model)
+    // with automatic failover across tool-capable panel candidates.
     const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
     if (hasTools) {
-        const agentModel = judge || panel.find(m => m.includes('mimo') || m.includes('gemini') || m.includes('deepseek') || m.includes('qwen')) || panel[0];
-        console.log(`[${ts}] [Fusion] Agent tool execution detected (tools=${body.tools.length}). Routing directly to tool-capable model: ${agentModel}`);
-        const agentBody = {
-            ...body,
-            model: agentModel,
-            _targetSlotSource: slotProjects[3] || slotProjects[0] || '',
-        };
-        const agentRes = await executeChatCompletion({
-            body: agentBody,
-            gatewayKey,
-            isInternalCall: false,
+        const toolCandidates: Array<{ model: string; slotSource: string }> = [];
+        if (judge) {
+            toolCandidates.push({ model: judge, slotSource: slotProjects[3] || slotProjects[0] || '' });
+        }
+        panel.forEach((m, idx) => {
+            if (!toolCandidates.some(c => c.model === m)) {
+                toolCandidates.push({ model: m, slotSource: slotProjects[idx] || '' });
+            }
         });
+        ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'google/diffusiongemma-26b-a4b-it'].forEach(bm => {
+            if (!toolCandidates.some(c => c.model === bm)) {
+                toolCandidates.push({ model: bm, slotSource: slotProjects[0] || '' });
+            }
+        });
+
+        let agentRes: any = null;
+        let successfulModel = '';
+        let lastError: any = null;
+
+        for (const cand of toolCandidates) {
+            try {
+                console.log(`[${ts}] [Fusion] Agent tool execution (tools=${body.tools.length}): Attempting model '${cand.model}' (source=${cand.slotSource || 'auto'})`);
+                const agentBody = {
+                    ...body,
+                    model: cand.model,
+                    _targetSlotSource: cand.slotSource,
+                };
+                agentRes = await executeChatCompletion({
+                    body: agentBody,
+                    gatewayKey,
+                    isInternalCall: false,
+                });
+                if (agentRes && (agentRes.ok !== false && !agentRes.error && agentRes.status !== 429 && agentRes.status !== 503)) {
+                    successfulModel = cand.model;
+                    break;
+                }
+            } catch (err: any) {
+                console.warn(`[Fusion] Tool candidate '${cand.model}' failed: ${err.message}. Trying next candidate.`);
+                lastError = err;
+            }
+        }
+
+        if (!agentRes) {
+            throw lastError || new Error('All tool-capable models failed to execute agent turn');
+        }
+
         return {
             finalResponse: agentRes,
             fusionMetadata: {
-                panel_models: [agentModel],
+                panel_models: [successfulModel || judge],
                 successful_drafts: 1,
-                judge_model: agentModel,
+                judge_model: successfulModel || judge,
                 total_latency_ms: Date.now() - startTime,
-                draft_details: [{ model: agentModel, latency_ms: Date.now() - startTime, success: true }],
+                draft_details: [{ model: successfulModel || judge, latency_ms: Date.now() - startTime, success: true }],
             },
             isStream: !!body.stream,
         };

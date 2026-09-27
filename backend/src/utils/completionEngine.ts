@@ -13,7 +13,7 @@ import {
     markRateLimitExceeded,
     getOrCreateKeyState
 } from './freeTierGuardian';
-import { consultSystemOne } from './engineBridge';
+import { consultSystemOne, getEngineConfig } from './engineBridge';
 import { resolveModelOrHeal, HealingResult } from './modelHealing';
 import { notifyNewRequest } from './dashboardEvents';
 import { canPassCircuit, recordCircuitSuccess, recordCircuitFailure } from './circuitBreaker';
@@ -391,7 +391,7 @@ async function executeHighCapacityFailover({
 
                 const costFields = await buildCostFields(resolvedModel, upstream.provider, finalPromptTokens, finalCompletionTokens);
                 insertRequestLog({
-                    project_id: gatewayKey.project_id,
+                    project_id: upstream.project_id || gatewayKey.project_id,
                     gateway_key_id: gatewayKey.id,
                     upstream_key_id: upstream.id,
                     provider: upstream.provider,
@@ -462,7 +462,7 @@ async function executeHighCapacityFailover({
 
             const costFields = await buildCostFields(resolvedModel, upstream.provider, finalPromptTokens, finalCompletionTokens);
             insertRequestLog({
-                project_id: gatewayKey.project_id,
+                project_id: upstream.project_id || gatewayKey.project_id,
                 gateway_key_id: gatewayKey.id,
                 upstream_key_id: upstream.id,
                 provider: upstream.provider,
@@ -570,6 +570,14 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     console.log(`[CompletionEngine] Auto-healing '${requestedModel}' for OpenRouter channel to 'qwen/qwen-2.5-72b-instruct'`);
                     requestedModel = 'qwen/qwen-2.5-72b-instruct';
                     body.model = requestedModel;
+                } else if (sampleProvider === 'nvidia' && !requestedModel.toLowerCase().includes('nvidia') && !requestedModel.toLowerCase().includes('diffusiongemma') && !requestedModel.toLowerCase().includes('deepseek') && !requestedModel.toLowerCase().includes('codegemma')) {
+                    console.log(`[CompletionEngine] Auto-healing slot model '${requestedModel}' for Nvidia channel to 'google/diffusiongemma-26b-a4b-it'`);
+                    requestedModel = 'google/diffusiongemma-26b-a4b-it';
+                    body.model = requestedModel;
+                } else if (sampleProvider === 'groq' && !requestedModel.toLowerCase().includes('groq') && !requestedModel.toLowerCase().includes('qwen') && !requestedModel.toLowerCase().includes('llama') && !requestedModel.toLowerCase().includes('gpt-oss') && !requestedModel.toLowerCase().includes('allam')) {
+                    console.log(`[CompletionEngine] Auto-healing slot model '${requestedModel}' for Groq channel to 'qwen/qwen3.8-27b'`);
+                    requestedModel = 'qwen/qwen3.8-27b';
+                    body.model = requestedModel;
                 }
 
                 if (sampleProvider !== 'openrouter' && (requestedModel.includes(':free') || requestedModel.startsWith('thinkingmachines/') || requestedModel.startsWith('poolside/'))) {
@@ -593,6 +601,21 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                         upstream_model_name: null,
                     }));
                 }
+
+                // Resilient slot failover: Append active free keys from other free projects as backup candidates
+                const { data: backupFreeKeys } = await supabase
+                    .from('upstream_keys')
+                    .select('id, provider')
+                    .eq('billing_type', 'free')
+                    .neq('project_id', projId);
+                if (backupFreeKeys && backupFreeKeys.length > 0) {
+                    const backupAllowed = backupFreeKeys.map((k: any) => ({
+                        upstream_key_id: k.id,
+                        model_name: requestedModel,
+                        upstream_model_name: null,
+                    }));
+                    allowed = [...allowed, ...backupAllowed];
+                }
             }
         } else {
             const keyId = targetSource.replace('key:', '');
@@ -604,51 +627,73 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         }
     }
 
-    // Cross-project resolution for internal calls (Virtual Consensus Fusion)
-    if (allowed.length === 0 && isInternalCall) {
+    const engineConfig = getEngineConfig(false);
+    const isStrictFree = engineConfig?.strictFreeTierMode ?? true;
+
+    // Cross-project resolution & Free-Tier Priority:
+    // 1. If allowed is empty, search across all projects (internal or external).
+    // 2. If strictFreeTierMode is active, discover and prepend matching free-tier keys across all projects so free tier is ALWAYS used first!
+    if (allowed.length === 0 || isInternalCall || isStrictFree) {
         // 1. Direct model lookup across all projects
         const { data: globalMatches } = await supabase
             .from('gateway_key_models')
             .select('upstream_key_id, model_name, upstream_model_name')
             .eq('model_name', requestedModel);
 
-        if (globalMatches && globalMatches.length > 0) {
+        if (globalMatches && globalMatches.length > 0 && allowed.length === 0) {
             allowed = globalMatches;
         } else {
             // 2. Provider-heuristic lookup across all upstream_keys in the gateway
             const { data: allUpstreams } = await supabase
                 .from('upstream_keys')
-                .select('id, provider');
+                .select('id, provider, billing_type');
 
             let matchingGlobal: any[] = [];
             const reqLower = requestedModel.toLowerCase();
             if (reqLower.includes('mimo')) {
                 matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'mimo');
             } else if (reqLower.includes('deepseek')) {
-                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'deepseek');
+                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'deepseek' || (k.provider === 'nvidia' && k.billing_type === 'free'));
             } else if (reqLower.includes('gemini') || reqLower.includes('google')) {
-                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'google' || k.provider === 'vertex');
+                matchingGlobal = (allUpstreams || []).filter((k: any) => (k.provider === 'nvidia' && k.billing_type === 'free') || (k.provider === 'openrouter' && k.billing_type === 'free') || k.provider === 'google');
             } else if (reqLower.includes('groq') || reqLower.includes('llama')) {
                 matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'groq');
             } else if (reqLower.includes('qwen') || reqLower.includes('cerebras')) {
-                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'cerebras' || k.provider === 'groq');
+                matchingGlobal = (allUpstreams || []).filter((k: any) => (k.provider === 'groq' && k.billing_type === 'free') || (k.provider === 'openrouter' && k.billing_type === 'free') || k.provider === 'cerebras');
+            } else if (reqLower.includes('gpt') || reqLower.includes('oss')) {
+                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'groq');
+            } else if (reqLower.includes('diffusiongemma') || reqLower.includes('codegemma')) {
+                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'nvidia');
             } else if (reqLower.includes('mistral') || reqLower.includes('codestral')) {
                 matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'mistral');
             } else if (reqLower.includes('claude')) {
                 matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'puter');
             }
 
-            if (matchingGlobal.length === 0) {
-                // Fallback to openrouter
+            if (matchingGlobal.length === 0 && allowed.length === 0) {
+                // Fallback to openrouter free keys first, then any openrouter
                 matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'openrouter');
             }
 
             if (matchingGlobal.length > 0) {
-                allowed = matchingGlobal.map((k: any) => ({
+                const mappedGlobal = matchingGlobal.map((k: any) => ({
                     upstream_key_id: k.id,
                     model_name: requestedModel,
                     upstream_model_name: null,
                 }));
+                // If allowed already had items (e.g. paid keys), prepend free matching keys
+                if (allowed.length > 0 && isStrictFree) {
+                    const freeMapped = matchingGlobal.filter((k: any) => k.billing_type === 'free').map((k: any) => ({
+                        upstream_key_id: k.id,
+                        model_name: requestedModel,
+                        upstream_model_name: null,
+                    }));
+                    if (freeMapped.length > 0) {
+                        allowed = [...freeMapped, ...allowed];
+                    }
+                } else if (allowed.length === 0) {
+                    allowed = mappedGlobal;
+                }
             }
         }
     }
@@ -896,7 +941,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         const freeStartIndex = modelCounters[counterKey] % freeCandidates.length;
         modelCounters[counterKey]++;
         const rotatedFree = freeCandidates.map((_: any, i: number) => freeCandidates[(freeStartIndex + i) % freeCandidates.length]);
-        candidates = [...rotatedFree, ...paidCandidates];
+        candidates = isStrictFree ? rotatedFree : [...rotatedFree, ...paidCandidates];
     } else if (paidCandidates.length > 0) {
         const paidStartIndex = modelCounters[counterKey] % paidCandidates.length;
         modelCounters[counterKey]++;
@@ -926,6 +971,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     let finalPromptTokens = 0;
     let finalCompletionTokens = 0;
     let usedUpstreamKeyId: string | null = null;
+    let usedUpstreamProject: string | null = null;
     let usedProvider: string | null = null;
     let finalErrorMsg: string | null = null;
     let finalErrorData: any = null;
@@ -972,6 +1018,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         }
 
         usedProvider = upstream.provider;
+        usedUpstreamProject = upstream.project_id || null;
         const timestamp = new Date().toISOString();
         console.log(`[${timestamp}] [Load Balancer] Attempt ${attempt + 1}: Using upstream key ${upstream.id} for model ${requestedModel} (${usedProvider})`);
 
@@ -1042,7 +1089,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     const latencyMs = Date.now() - startTime;
                     const costFields = await buildCostFields(requestedModel, 'puter', finalPromptTokens, finalCompletionTokens);
                     insertRequestLog({
-                        project_id: gatewayKey.project_id,
+                        project_id: upstream.project_id || gatewayKey.project_id,
                         gateway_key_id: gatewayKey.id,
                         upstream_key_id: upstream.id,
                         provider: 'puter',
@@ -1385,7 +1432,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 const latencyMs = Date.now() - startTime;
                 const costFields = await buildCostFields(requestedModel, usedProvider, finalPromptTokens, finalCompletionTokens);
                 insertRequestLog({
-                    project_id: gatewayKey.project_id,
+                    project_id: upstream.project_id || gatewayKey.project_id,
                     gateway_key_id: gatewayKey.id,
                     upstream_key_id: usedUpstreamKeyId,
                     provider: usedProvider,
@@ -1502,7 +1549,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
     const latencyMs = Date.now() - startTime;
     const costFields = await buildCostFields(requestedModel, usedProvider, finalPromptTokens, finalCompletionTokens);
     insertRequestLog({
-        project_id: gatewayKey.project_id,
+        project_id: usedUpstreamProject || gatewayKey.project_id,
         gateway_key_id: gatewayKey.id,
         upstream_key_id: usedUpstreamKeyId,
         provider: usedProvider,

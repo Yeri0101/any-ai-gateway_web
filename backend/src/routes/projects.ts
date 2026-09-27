@@ -27,7 +27,7 @@ projects.get('/dashboard-overview', async (c) => {
                 .limit(2000),
             supabase
                 .from('upstream_keys')
-                .select('id, billing_type'),
+                .select('id, billing_type, project_id'),
         ]);
 
         if (projectsRes.error) return c.json({ error: projectsRes.error.message }, 500);
@@ -37,6 +37,7 @@ projects.get('/dashboard-overview', async (c) => {
         const upstreamKeys = upstreamKeysRes.data || [];
 
         const billingTypeMap = new Map(upstreamKeys.map((k: any) => [k.id, k.billing_type || 'paid']));
+        const upstreamProjMap = new Map(upstreamKeys.map((k: any) => [k.id, k.project_id]));
         const projectNameMap = new Map(projectsData.map((p: any) => [p.id, p.name]));
 
         const gwProjectMap = new Map();
@@ -60,7 +61,7 @@ projects.get('/dashboard-overview', async (c) => {
                 actualCostUsd += cost;
             }
 
-            const projId = log.project_id || gwProjectMap.get(log.gateway_key_id);
+            const projId = (log.upstream_key_id ? upstreamProjMap.get(log.upstream_key_id) : null) || log.project_id || gwProjectMap.get(log.gateway_key_id);
             if (projId && log.latency_ms != null) {
                 if (!latencyMap[projId]) latencyMap[projId] = { sum: 0, count: 0 };
                 latencyMap[projId].sum += log.latency_ms;
@@ -83,7 +84,7 @@ projects.get('/dashboard-overview', async (c) => {
         const recentCalls = logs
             .filter((log: any) => !!log.created_at)
             .map((log: any) => {
-                const projId = log.project_id || gwProjectMap.get(log.gateway_key_id);
+                const projId = (log.upstream_key_id ? upstreamProjMap.get(log.upstream_key_id) : null) || log.project_id || gwProjectMap.get(log.gateway_key_id);
                 return {
                     project_id: projId,
                     project_name: projId ? (projectNameMap.get(projId) || 'Proyecto') : 'Proyecto',
@@ -159,11 +160,17 @@ projects.get('/realtime-stream', async (c) => {
 projects.get('/recent-calls', async (c) => {
     const { data: recentLogs, error: logsError } = await supabase
         .from('request_logs')
-        .select('project_id, gateway_key_id, provider, model, latency_ms, total_tokens, created_at')
+        .select('project_id, gateway_key_id, upstream_key_id, provider, model, latency_ms, total_tokens, created_at')
         .order('created_at', { ascending: false })
         .limit(12);
 
     if (logsError) return c.json({ error: logsError.message }, 500);
+
+    const upstreamKeyIds = [...new Set((recentLogs || []).map((log: any) => log.upstream_key_id).filter(Boolean))];
+    const { data: upstreamKeysData } = upstreamKeyIds.length > 0
+        ? await supabase.from('upstream_keys').select('id, project_id').in('id', upstreamKeyIds)
+        : { data: [] };
+    const projectIdByUpstreamKeyId = new Map((upstreamKeysData || []).map((uk: any) => [uk.id, uk.project_id]));
 
     const directProjectIds = (recentLogs || []).map((log: any) => log.project_id).filter(Boolean);
     const gatewayKeyIds = [...new Set((recentLogs || []).map((log: any) => log.gateway_key_id).filter(Boolean))];
@@ -180,6 +187,7 @@ projects.get('/recent-calls', async (c) => {
     const projectIdByGatewayKeyId = new Map((gatewayKeysData || []).map((gatewayKey: any) => [gatewayKey.id, gatewayKey.project_id]));
     const allProjectIds = [...new Set([
         ...directProjectIds,
+        ...(upstreamKeysData || []).map((uk: any) => uk.project_id).filter(Boolean),
         ...(gatewayKeysData || []).map((gatewayKey: any) => gatewayKey.project_id).filter(Boolean),
     ])];
 
@@ -196,10 +204,13 @@ projects.get('/recent-calls', async (c) => {
 
     const normalizedLogs = (recentLogs || [])
         .map((log: any) => {
-            const resolvedProjectId = log.project_id || projectIdByGatewayKeyId.get(log.gateway_key_id) || null;
+            const resolvedProjectId = (log.upstream_key_id ? projectIdByUpstreamKeyId.get(log.upstream_key_id) : null)
+                || log.project_id
+                || projectIdByGatewayKeyId.get(log.gateway_key_id)
+                || null;
             return {
                 project_id: resolvedProjectId,
-                project_name: resolvedProjectId ? (projectNameById.get(resolvedProjectId) || 'Proyecto desconocido') : 'Proyecto desconocido',
+                project_name: resolvedProjectId ? (projectNameById.get(resolvedProjectId) || 'Proyecto') : 'Proyecto',
                 model: log.model || 'Modelo desconocido',
                 provider: log.provider || null,
                 latency_ms: log.latency_ms ?? null,
