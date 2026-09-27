@@ -174,8 +174,11 @@ export default function ProjectDetail() {
         tpm: number;
         rpd: number;
         tpd: number;
+        hasKnownLimits?: boolean;
+        limitSource?: 'verified' | 'custom' | 'unverified';
     } | null>(null);
     const [guardianStates, setGuardianStates] = useState<Record<string, any>>({});
+    const [roundStates, setRoundStates] = useState<any[]>([]);
     const [billingMenuOpen, setBillingMenuOpen] = useState(false);
     const [modesModalOpen, setModesModalOpen] = useState(false);
 
@@ -203,6 +206,8 @@ export default function ProjectDetail() {
             try {
                 const guardianRes = await fetchApi('/engine/guardian/states');
                 if (guardianRes) setGuardianStates(guardianRes);
+                const roundsRes = await fetchApi(`/engine/guardian/rounds?projectId=${id}`);
+                if (roundsRes && roundsRes.rounds) setRoundStates(roundsRes.rounds);
             } catch { }
 
             const modelsData = [];
@@ -456,14 +461,17 @@ export default function ProjectDetail() {
 
     const openRateLimitModal = (p: UpstreamKey) => {
         const guardian = guardianStates[p.id];
+        const isKnownDefault = ['google', 'groq', 'cerebras', 'mistral', 'openrouter'].includes(p.provider.toLowerCase());
         setRateLimitModal({
             providerId: p.id,
             providerName: p.provider,
             billingType: p.billing_type || 'free',
-            rpm: guardian?.rpm?.limit ?? 15,
+            rpm: guardian?.rpm?.nominalLimit ?? guardian?.rpm?.limit ?? 15,
             tpm: guardian?.tpm?.limit ?? 1000000,
             rpd: guardian?.daily?.rpdLimit ?? 1500,
             tpd: guardian?.daily?.tpdLimit ?? 10000000,
+            hasKnownLimits: guardian?.hasKnownLimits !== undefined ? guardian.hasKnownLimits : isKnownDefault,
+            limitSource: guardian?.limitSource || (isKnownDefault ? 'verified' : 'unverified'),
         });
     };
 
@@ -480,6 +488,8 @@ export default function ProjectDetail() {
                     tpm: Number(rateLimitModal.tpm),
                     rpd: Number(rateLimitModal.rpd),
                     tpd: Number(rateLimitModal.tpd),
+                    hasKnownLimits: rateLimitModal.hasKnownLimits,
+                    limitSource: rateLimitModal.limitSource,
                 }),
             });
             toast.success(t('project.limits_saved') || 'Rate limits updated successfully');
@@ -1248,7 +1258,37 @@ export default function ProjectDetail() {
                                     <p>Add your first upstream API key using the form on the left.</p>
                                 </div>
                             ) : (
-                                <div className="table-wrapper">
+                                <>
+                                    {roundStates && roundStates.length > 0 && (
+                                        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                                            {roundStates.map((rs: any) => (
+                                                <div
+                                                    key={rs.poolKey}
+                                                    style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.5rem',
+                                                        padding: '0.35rem 0.75rem',
+                                                        borderRadius: 'var(--radius-pill)',
+                                                        background: 'var(--surface-2)',
+                                                        border: '1px solid var(--border-default)',
+                                                        fontSize: '0.72rem',
+                                                        fontFamily: 'var(--font-mono)'
+                                                    }}
+                                                >
+                                                    <span style={{ color: 'var(--brand-cyan)', fontWeight: 700 }}>🔄 Round #{rs.currentRound}</span>
+                                                    <span style={{ color: 'var(--text-muted)' }}>({rs.model}):</span>
+                                                    <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                                                        {rs.usedKeysCount} / {rs.totalKeys} keys dispatched
+                                                    </span>
+                                                    <div style={{ width: 45, height: 4, background: 'var(--surface-1)', borderRadius: 2, overflow: 'hidden' }}>
+                                                        <div style={{ width: `${Math.round((rs.usedKeysCount / Math.max(1, rs.totalKeys)) * 100)}%`, height: '100%', background: 'var(--brand-cyan)' }} />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="table-wrapper">
                                     <table className="data-table">
                                         <thead>
                                             <tr>
@@ -1340,7 +1380,14 @@ export default function ProjectDetail() {
                                                                             <div style={{ width: `${Math.max(4, rpmPercent)}%`, height: '100%', background: color, transition: 'width 0.3s' }} />
                                                                         </div>
                                                                         <div className="flex items-center justify-between" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                                                                            <span>{health.requestsPerDay || 0} req/d</span>
+                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                                                                {guardian?.hasKnownLimits ? (
+                                                                                    <span style={{ color: '#22c55e', fontSize: '0.65rem', fontWeight: 700 }} title="Verified Provider Limits">✓ Known</span>
+                                                                                ) : (
+                                                                                    <span style={{ color: 'var(--brand-amber)', fontSize: '0.65rem', fontWeight: 700 }} title="Unverified / Adaptive Probing">⚠ Adapt</span>
+                                                                                )}
+                                                                                <span>• {guardian?.daily?.requestsToday ?? health.requestsPerDay ?? 0}/{guardian?.daily?.rpdLimit ?? '∞'}</span>
+                                                                            </span>
                                                                             <button
                                                                                 onClick={() => openRateLimitModal(p)}
                                                                                 style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontSize: '0.68rem', fontWeight: 600 }}
@@ -1348,6 +1395,11 @@ export default function ProjectDetail() {
                                                                                 Limits ✎
                                                                             </button>
                                                                         </div>
+                                                                        {guardian?.dynamicSafeRpm && (
+                                                                            <div style={{ fontSize: '0.62rem', color: 'var(--brand-amber)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                                                                                Safe RPM: {guardian.dynamicSafeRpm} (Derated)
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 );
                                                             })()}
@@ -1430,6 +1482,7 @@ export default function ProjectDetail() {
                                         </tbody>
                                     </table>
                                 </div>
+                            </>
                             )}
                         </div>
                     </div>
@@ -2581,7 +2634,7 @@ export default function ProjectDetail() {
                             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                                 <button
                                     type="button"
-                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 5, tpm: 250000, rpd: 20 } : null)}
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 5, tpm: 250000, rpd: 20, hasKnownLimits: true, limitSource: 'verified' } : null)}
                                     className="btn btn-secondary btn-sm"
                                     style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
                                 >
@@ -2589,7 +2642,7 @@ export default function ProjectDetail() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 15, tpm: 250000, rpd: 1000 } : null)}
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 15, tpm: 250000, rpd: 1000, hasKnownLimits: true, limitSource: 'verified' } : null)}
                                     className="btn btn-secondary btn-sm"
                                     style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
                                 >
@@ -2597,7 +2650,7 @@ export default function ProjectDetail() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 10, tpm: 250000, rpd: 250 } : null)}
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 10, tpm: 250000, rpd: 250, hasKnownLimits: true, limitSource: 'verified' } : null)}
                                     className="btn btn-secondary btn-sm"
                                     style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
                                 >
@@ -2605,7 +2658,7 @@ export default function ProjectDetail() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 30, tpm: 14400, rpd: 14400 } : null)}
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 30, tpm: 14400, rpd: 14400, hasKnownLimits: true, limitSource: 'verified' } : null)}
                                     className="btn btn-secondary btn-sm"
                                     style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
                                 >
@@ -2613,13 +2666,53 @@ export default function ProjectDetail() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 300, tpm: 500000, rpd: 100000 } : null)}
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, rpm: 300, tpm: 500000, rpd: 100000, hasKnownLimits: false, limitSource: 'unverified' } : null)}
                                     className="btn btn-secondary btn-sm"
                                     style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }}
                                 >
                                     Paid (High Quota)
                                 </button>
                             </div>
+                        </div>
+
+                        {/* Limits Verification & Policy Mode */}
+                        <div style={{ marginBottom: '1rem', padding: '0.65rem 0.85rem', background: 'var(--surface-2)', borderRadius: 6, border: '1px solid var(--border-default)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.45rem' }}>
+                                <span style={{ fontSize: '0.74rem', fontWeight: 600 }}>Limits Policy & Verification:</span>
+                                <span style={{
+                                    fontSize: '0.66rem',
+                                    padding: '0.12rem 0.45rem',
+                                    borderRadius: 4,
+                                    background: rateLimitModal.hasKnownLimits ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)',
+                                    color: rateLimitModal.hasKnownLimits ? '#22c55e' : '#f59e0b',
+                                    fontWeight: 700
+                                }}>
+                                    {rateLimitModal.hasKnownLimits ? '✓ Known / Documented Limits' : '⚠ Unknown / Adaptive Probing'}
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, hasKnownLimits: true, limitSource: 'verified' } : null)}
+                                    className={`btn btn-sm ${rateLimitModal.hasKnownLimits ? 'btn-primary' : 'btn-secondary'}`}
+                                    style={{ fontSize: '0.68rem', padding: '0.25rem 0.55rem' }}
+                                >
+                                    Known Limits (Strict 20 RPD & Auto-Fallback)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setRateLimitModal(m => m ? { ...m, hasKnownLimits: false, limitSource: 'unverified' } : null)}
+                                    className={`btn btn-sm ${!rateLimitModal.hasKnownLimits ? 'btn-primary' : 'btn-secondary'}`}
+                                    style={{ fontSize: '0.68rem', padding: '0.25rem 0.55rem' }}
+                                >
+                                    Unknown Limits (Adaptive Early-Protection)
+                                </button>
+                            </div>
+                            <p style={{ margin: '0.35rem 0 0', fontSize: '0.67rem', color: 'var(--text-muted)' }}>
+                                {rateLimitModal.hasKnownLimits
+                                    ? 'Gateway enforces known company quota (e.g. 20 RPD on 3.8). When exhausted, it seamlessly substitutes to fallback and shows restabilization date.'
+                                    : 'Provider policy is not documented or varies. Gateway dynamically derates safe limits on early 429/503 anomalies and rotates instantly.'}
+                            </p>
                         </div>
 
                         {/* Form Inputs */}

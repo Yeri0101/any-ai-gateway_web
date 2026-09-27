@@ -9,7 +9,10 @@ import {
 import {
     getAllRateLimitStates,
     updateCustomLimits,
-    getOrCreateKeyState
+    getOrCreateKeyState,
+    getRoundStats,
+    resetRound,
+    calculateQuotaResetTime
 } from '../utils/freeTierGuardian';
 import { supabase } from '../db';
 import { adviseFusionPresets, validateAndSelectActivePreset } from '../utils/aiModelAdvisor';
@@ -203,6 +206,35 @@ engineRoutes.get('/guardian/states', async (c) => {
 });
 
 /**
+ * GET /engine/guardian/rounds — Snapshot of active round tracking by project/model
+ */
+engineRoutes.get('/guardian/rounds', async (c) => {
+    const projectId = c.req.query('projectId');
+    const model = c.req.query('model');
+    return c.json({ ok: true, rounds: getRoundStats(projectId, model) });
+});
+
+/**
+ * POST /engine/guardian/rounds/reset — Reset round counter and used keys
+ */
+engineRoutes.post('/guardian/rounds/reset', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { projectId, model } = body;
+    if (!projectId) {
+        return c.json({ error: 'projectId is required' }, 400);
+    }
+    resetRound(projectId, model || 'all');
+    return c.json({ ok: true, message: `Round reset for ${projectId}:${model || 'all'}` });
+});
+
+/**
+ * GET /engine/guardian/quota-reset — Restabilization time calculation
+ */
+engineRoutes.get('/guardian/quota-reset', async (c) => {
+    return c.json({ ok: true, ...calculateQuotaResetTime() });
+});
+
+/**
  * POST /engine/guardian/limits — Update limits manually for a key
  */
 engineRoutes.post('/guardian/limits', async (c) => {
@@ -212,6 +244,8 @@ engineRoutes.post('/guardian/limits', async (c) => {
     const tpm = body.tpm ?? body.limits?.tokensPerMinute ?? body.limits?.tpm;
     const rpd = body.rpd ?? body.limits?.requestsPerDay ?? body.limits?.rpd;
     const tpd = body.tpd ?? body.limits?.tokensPerDay ?? body.limits?.tpd;
+    const hasKnownLimits = body.hasKnownLimits ?? body.limits?.hasKnownLimits;
+    const limitSource = body.limitSource ?? body.limits?.limitSource;
     const provider = body.provider;
     const billing_type = body.billing_type;
 
@@ -222,7 +256,14 @@ engineRoutes.post('/guardian/limits', async (c) => {
     // Ensure initialized
     getOrCreateKeyState(upstreamKeyId, provider || 'google', billing_type || 'free');
 
-    const updated = updateCustomLimits(upstreamKeyId, { rpm, tpm, rpd, tpd });
+    const updated = updateCustomLimits(upstreamKeyId, {
+        rpm,
+        tpm,
+        rpd,
+        tpd,
+        hasKnownLimits: hasKnownLimits !== undefined ? !!hasKnownLimits : undefined,
+        limitSource: limitSource || undefined,
+    });
     return c.json({ success: true, updated });
 });
 

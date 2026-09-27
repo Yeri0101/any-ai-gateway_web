@@ -11,7 +11,11 @@ import {
     recordRateLimitConsumption,
     ingestRateLimitHeaders,
     markRateLimitExceeded,
-    getOrCreateKeyState
+    getOrCreateKeyState,
+    prioritizeCandidatesByRound,
+    recordKeyUsedInRound,
+    calculateQuotaResetTime,
+    handleEarlyUpstreamAnomaly
 } from './freeTierGuardian';
 import { consultSystemOne, getEngineConfig } from './engineBridge';
 import { resolveModelOrHeal, HealingResult } from './modelHealing';
@@ -39,7 +43,16 @@ export interface CompletionEngineOptions {
     c?: any;
     returnRawStream?: boolean;
     isInternalCall?: boolean;
+    _hasFallenBack?: boolean;
 }
+
+// Fallback hierarchy for models when daily quota is exhausted or provider is congested
+export const MODEL_FALLBACK_CHAINS: Record<string, string[]> = {
+    'gemini-3.8-flash': ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'],
+    'gemini-3.7-flash': ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'],
+    'gemini-3.6-flash': ['gemini-3.5-flash', 'gemini-3.5-flash-lite'],
+    'gemini-3.5-flash': ['gemini-3.5-flash-lite'],
+};
 
 export interface CompletionEngineResult {
     ok: boolean;
@@ -632,8 +645,9 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
 
     // Cross-project resolution & Free-Tier Priority:
     // 1. If allowed is empty, search across all projects (internal or external).
-    // 2. If strictFreeTierMode is active, discover and prepend matching free-tier keys across all projects so free tier is ALWAYS used first!
-    if (allowed.length === 0 || isInternalCall || isStrictFree) {
+    // 2. If strictFreeTierMode is active and allowed has NO free keys, discover and prepend matching free-tier keys!
+    const alreadyHasProjectKeys = allowed.length > 0;
+    if (!alreadyHasProjectKeys || isInternalCall) {
         // 1. Direct model lookup across all projects
         const { data: globalMatches } = await supabase
             .from('gateway_key_models')
@@ -655,7 +669,13 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             } else if (reqLower.includes('deepseek')) {
                 matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'deepseek' || (k.provider === 'nvidia' && k.billing_type === 'free'));
             } else if (reqLower.includes('gemini') || reqLower.includes('google')) {
-                matchingGlobal = (allUpstreams || []).filter((k: any) => (k.provider === 'nvidia' && k.billing_type === 'free') || (k.provider === 'openrouter' && k.billing_type === 'free') || k.provider === 'google');
+                matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'google' || (k.provider === 'nvidia' && k.billing_type === 'free') || (k.provider === 'openrouter' && k.billing_type === 'free'));
+                // Ensure native Google keys are always first
+                matchingGlobal.sort((a: any, b: any) => {
+                    if (a.provider === 'google' && b.provider !== 'google') return -1;
+                    if (b.provider === 'google' && a.provider !== 'google') return 1;
+                    return 0;
+                });
             } else if (reqLower.includes('groq') || reqLower.includes('llama')) {
                 matchingGlobal = (allUpstreams || []).filter((k: any) => k.provider === 'groq');
             } else if (reqLower.includes('qwen') || reqLower.includes('cerebras')) {
@@ -681,17 +701,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     model_name: requestedModel,
                     upstream_model_name: null,
                 }));
-                // If allowed already had items (e.g. paid keys), prepend free matching keys
-                if (allowed.length > 0 && isStrictFree) {
-                    const freeMapped = matchingGlobal.filter((k: any) => k.billing_type === 'free').map((k: any) => ({
-                        upstream_key_id: k.id,
-                        model_name: requestedModel,
-                        upstream_model_name: null,
-                    }));
-                    if (freeMapped.length > 0) {
-                        allowed = [...freeMapped, ...allowed];
-                    }
-                } else if (allowed.length === 0) {
+                if (allowed.length === 0) {
                     allowed = mappedGlobal;
                 }
             }
@@ -929,23 +939,57 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
 
     // Free Tier Priority Engine: Separate free tier keys and paid/premium keys.
     // Free keys are rotated via round-robin; paid keys are placed strictly as secondary fallbacks!
-    const freeCandidates = candidates.filter((cand: any) => cand.billing_type === 'free');
-    const paidCandidates = candidates.filter((cand: any) => cand.billing_type !== 'free');
+    let freeCandidates = candidates.filter((cand: any) => cand.billing_type === 'free');
+    let paidCandidates = candidates.filter((cand: any) => cand.billing_type !== 'free');
 
-    const counterKey = `${gatewayKey.id}:${requestedModel}`;
-    if (typeof modelCounters[counterKey] === 'undefined') {
-        modelCounters[counterKey] = 0;
+    // Daily Pool Exhaustion Check & Automatic Model Substitution:
+    // If all free candidates for requestedModel are daily exhausted (e.g. 8 keys * 20 RPD on gemini-3.8-flash reached limit),
+    // automatically substitute to the next available fallback model in the chain!
+    const normalizedReqModel = requestedModel.toLowerCase().replace(/^(google|vertex)\//, '');
+    let substitutionInfo: {
+        substituted: boolean;
+        originalModel: string;
+        substitutedModel: string;
+        reason: string;
+        resetsAt: string;
+    } | null = null;
+
+    const allFreeExhausted = freeCandidates.length > 0 && freeCandidates.every((cand: any) => {
+        const st = getOrCreateKeyState(cand.upstream_key_id, cand.provider, 'free', undefined, requestedModel);
+        return st.status === 'daily_exhausted';
+    });
+
+    if (allFreeExhausted && MODEL_FALLBACK_CHAINS[normalizedReqModel]) {
+        const fallbackList = MODEL_FALLBACK_CHAINS[normalizedReqModel];
+        for (const nextModel of fallbackList) {
+            const hasCapacity = freeCandidates.some((cand: any) => {
+                const st = getOrCreateKeyState(cand.upstream_key_id, cand.provider, 'free', undefined, nextModel);
+                return st.status !== 'daily_exhausted';
+            });
+            if (hasCapacity) {
+                const resetInfo = calculateQuotaResetTime();
+                substitutionInfo = {
+                    substituted: true,
+                    originalModel: requestedModel,
+                    substitutedModel: nextModel,
+                    reason: `All ${freeCandidates.length} upstream keys reached daily free limit for '${requestedModel}' (20 RPD/key). Automatically substituted to '${nextModel}'. Restabilizes at ${resetInfo.resetsAtHuman}`,
+                    resetsAt: resetInfo.resetsAtIso,
+                };
+                console.warn(`[CompletionEngine] 🔄 Daily Pool Exhaustion: ${substitutionInfo.reason}`);
+                requestedModel = nextModel;
+                body.model = nextModel;
+                break;
+            }
+        }
     }
 
+    // Round Tracker: Order candidates fairly according to round state
     if (freeCandidates.length > 0) {
-        const freeStartIndex = modelCounters[counterKey] % freeCandidates.length;
-        modelCounters[counterKey]++;
-        const rotatedFree = freeCandidates.map((_: any, i: number) => freeCandidates[(freeStartIndex + i) % freeCandidates.length]);
-        candidates = isStrictFree ? rotatedFree : [...rotatedFree, ...paidCandidates];
+        const prioritizedFree = prioritizeCandidatesByRound(freeCandidates, gatewayKey.project_id, requestedModel);
+        candidates = isStrictFree ? prioritizedFree : [...prioritizedFree, ...paidCandidates];
     } else if (paidCandidates.length > 0) {
-        const paidStartIndex = modelCounters[counterKey] % paidCandidates.length;
-        modelCounters[counterKey]++;
-        candidates = paidCandidates.map((_: any, i: number) => paidCandidates[(paidStartIndex + i) % paidCandidates.length]);
+        const prioritizedPaid = prioritizeCandidatesByRound(paidCandidates, gatewayKey.project_id, requestedModel);
+        candidates = prioritizedPaid;
     }
 
     const tsRouter = new Date().toISOString();
@@ -955,6 +999,13 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
         c.header('X-TierMax-Engine', jevDecision.decisionSource);
         c.header('X-TierMax-Tier', routingTier);
         c.header('X-TierMax-Confidence', `${jevDecision.confidenceScore}`);
+        if (substitutionInfo && substitutionInfo.substituted) {
+            c.header('X-TierMax-Model-Substituted', 'true');
+            c.header('X-TierMax-Original-Model', substitutionInfo.originalModel);
+            c.header('X-TierMax-Substituted-Model', substitutionInfo.substitutedModel);
+            c.header('X-TierMax-Substitution-Reason', encodeURIComponent(substitutionInfo.reason));
+            c.header('X-TierMax-Quota-Reset-At', substitutionInfo.resetsAt);
+        }
     }
 
     if (candidates.length === 0) {
@@ -1348,12 +1399,16 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             if (!response.ok) {
                 const errData = await response.json().catch(() => ({}));
                 const isRateLimit = response.status === 429;
+                const isCapacityOr503 = response.status === 503 || response.status === 502;
                 const errMsg = errData.error?.message || response.statusText;
                 markProviderError(upstream.id, isRateLimit ? 'rate_limited' : 'error', errMsg);
 
-                if (isRateLimit) {
+                if (isRateLimit || isCapacityOr503) {
                     const retryAfter = response.headers.get('retry-after');
-                    markRateLimitExceeded(upstream.id, retryAfter ? parseInt(retryAfter, 10) : undefined);
+                    const retrySec = retryAfter ? parseInt(retryAfter, 10) : undefined;
+                    markRateLimitExceeded(upstream.id, retrySec);
+                    handleEarlyUpstreamAnomaly(upstream.id, response.status, errMsg, retrySec);
+                    console.warn(`[CompletionEngine] ⚠️ Early upstream anomaly (HTTP ${response.status}) on key ${upstream.id}. Seamlessly rotating to next key in round.`);
                 }
 
                 finalStatus = response.status;
@@ -1446,6 +1501,8 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                     ...costFields,
                 }).catch(() => { });
 
+                recordKeyUsedInRound(usedUpstreamKeyId || upstream.id, gatewayKey.project_id, requestedModel, candidates.map((cand: any) => cand.upstream_key_id));
+
                 if (returnRawStream) {
                     return {
                         ok: true,
@@ -1470,6 +1527,13 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                         if (healingInfo.reason) {
                             c.header('X-TierMax-Healing-Reason', encodeURIComponent(healingInfo.reason));
                         }
+                    }
+                    if (substitutionInfo && substitutionInfo.substituted) {
+                        c.header('X-TierMax-Model-Substituted', 'true');
+                        c.header('X-TierMax-Original-Model', substitutionInfo.originalModel);
+                        c.header('X-TierMax-Substituted-Model', substitutionInfo.substitutedModel);
+                        c.header('X-TierMax-Substitution-Reason', encodeURIComponent(substitutionInfo.reason));
+                        c.header('X-TierMax-Quota-Reset-At', substitutionInfo.resetsAt);
                     }
 
                     return stream(c, async (s) => {
@@ -1520,6 +1584,7 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             updateProviderCalls(upstream.id, finalTokens);
             recordRateLimitConsumption(upstream.id, finalTokens);
             recordLatency(upstream.id, Date.now() - fetchStartMs);
+            recordKeyUsedInRound(upstream.id, gatewayKey.project_id, requestedModel, candidates.map((cand: any) => cand.upstream_key_id));
 
             data._openclaw_metadata = {
                 provider: upstream.provider,
@@ -1580,6 +1645,15 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 reason: healingInfo.reason,
             };
         }
+        if (substitutionInfo && substitutionInfo.substituted) {
+            finalResponse._openclaw_substitution = {
+                substituted: true,
+                original_model: substitutionInfo.originalModel,
+                substituted_model: substitutionInfo.substitutedModel,
+                reason: substitutionInfo.reason,
+                resets_at: substitutionInfo.resetsAt,
+            };
+        }
         if (c && !isInternalCall && !returnRawStream) {
             c.header('X-Cache', 'MISS');
             c.header('X-Router-Tier', routingTier);
@@ -1590,6 +1664,13 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 if (healingInfo.reason) {
                     c.header('X-TierMax-Healing-Reason', encodeURIComponent(healingInfo.reason));
                 }
+            }
+            if (substitutionInfo && substitutionInfo.substituted) {
+                c.header('X-TierMax-Model-Substituted', 'true');
+                c.header('X-TierMax-Original-Model', substitutionInfo.originalModel);
+                c.header('X-TierMax-Substituted-Model', substitutionInfo.substitutedModel);
+                c.header('X-TierMax-Substitution-Reason', encodeURIComponent(substitutionInfo.reason));
+                c.header('X-TierMax-Quota-Reset-At', substitutionInfo.resetsAt);
             }
             return c.json(finalResponse, finalStatus as any);
         }
@@ -1602,6 +1683,8 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
             routingTier,
             isHealed,
             healingInfo,
+            isSubstituted: substitutionInfo?.substituted ?? false,
+            substitutionInfo,
         };
     } else {
         if (had413TooLarge || finalStatus === 413) {
@@ -1616,6 +1699,34 @@ export async function executeCompletionEngine(options: CompletionEngineOptions):
                 estimatedPromptTokens,
                 reason: `Upstream candidates failed with 413 / Request Too Large (${finalErrorMsg || 'Exceeded context or ITPM limits'})`,
             });
+        }
+
+        // Adaptive Early Anomaly Failover:
+        // If all upstream keys for the model failed due to rate limits (429) or capacity issues (503/502),
+        // automatically failover to the fallback model chain before giving up!
+        const normalizedFailModel = requestedModel.toLowerCase().replace(/^(google|vertex)\//, '');
+        const allFailedRateLimitOrCapacity = candidates.length > 0 && (finalStatus === 429 || finalStatus === 503 || finalStatus === 502);
+        if (allFailedRateLimitOrCapacity && MODEL_FALLBACK_CHAINS[normalizedFailModel] && !options._hasFallenBack) {
+            const fallbackChain = MODEL_FALLBACK_CHAINS[normalizedFailModel];
+            for (const nextModel of fallbackChain) {
+                console.log(`[CompletionEngine] 🚨 All upstream keys throttled or congested on '${requestedModel}'. Engaging Adaptive Early-Failover to '${nextModel}'`);
+                const resetInfo = calculateQuotaResetTime();
+                const failoverResult = await executeCompletionEngine({
+                    ...options,
+                    body: { ...body, model: nextModel },
+                    _hasFallenBack: true,
+                } as any);
+                if (failoverResult.ok || failoverResult.status === 200) {
+                    if (c && !isInternalCall && !returnRawStream) {
+                        c.header('X-TierMax-Model-Substituted', 'true');
+                        c.header('X-TierMax-Original-Model', requestedModel);
+                        c.header('X-TierMax-Substituted-Model', nextModel);
+                        c.header('X-TierMax-Substitution-Reason', encodeURIComponent(`All upstream keys throttled early on ${requestedModel}. Restabilizes: ${resetInfo.resetsAtIso}`));
+                        c.header('X-TierMax-Quota-Reset-At', resetInfo.resetsAtIso);
+                    }
+                    return failoverResult;
+                }
+            }
         }
 
         // Sanitize error status and messages for OpenClaw clients:
